@@ -120,6 +120,18 @@
     padding: 20px; width: min(420px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
   dialog.modal::backdrop { background: rgba(0,0,0,.35); }
   dialog.modal h3 { margin: 0; font-size: 1.05rem; }
+  .period-line { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px;
+    font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
+  #periodBtn { cursor: pointer; font-size: .75rem; padding: 3px 10px; }
+  .period-form { display: flex; flex-direction: column; gap: 10px; }
+  .period-opt { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--text); font-size: .9rem;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px; cursor: pointer; }
+  .period-opt:has(input[type=radio]:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .period-opt > input[type=radio] { margin-top: 3px; width: auto; flex: none; }
+  .period-opt > span { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+  .period-opt small { color: var(--muted); font-size: .75rem; line-height: 1.5; }
+  #pDay { width: 4.5em; padding: 4px 6px; display: inline-block; }
+  #pFixed { width: 100%; }
   .cat-summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: 1rem; }
   #catManager[open] .cat-summary { margin-bottom: 12px; }
   .cat-type { margin-bottom: 10px; }
@@ -277,7 +289,7 @@
         <summary>🧭 画面の見方</summary>
         <ul>
           <li><b>左側（入力メニュー）</b>：記録の追加、毎月の固定収支の登録、カテゴリの管理をします。左上の「☰ 入力メニュー」で開いたり閉じたりできます。</li>
-          <li><b>右側（月の表示）</b>：表示している月の収入・支出・収支の合計、支出のカテゴリ別グラフ、明細が出ます。</li>
+          <li><b>右側（月の表示）</b>：表示している月（集計期間）の収入・支出・収支の合計、支出のカテゴリ別グラフ、明細が出ます。月の表示の下に、実際の期間の日付が出ます。</li>
           <li>スマホなど画面が狭いときは、入力メニューは左から引き出す形になります。暗い所を押すと閉じます。</li>
         </ul>
       </details>
@@ -354,7 +366,23 @@
         <ul>
           <li>「◀ 前月」「次月 ▶」で1か月ずつ移動します。</li>
           <li>真ん中の「2026年 10月 ▾」を押すと年月を選ぶ画面が開き、好きな月へ移動できます。記録のある月には件数が出ます。</li>
-          <li>今月以外を見ているときは「今月」ボタンで今月に戻れます。</li>
+          <li>今月以外を見ているときは「今月」ボタンで今月に戻れます。集計期間を「給料日から」などにしている場合は、今日が入っている期間（例：10/3 なら「9月度」）に戻ります。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>🗓 集計期間（給料日スタートなど）</summary>
+        <p>月の表示の下にある「⚙ 集計期間」で、何日から何日までを「1か月」として集計するかを選べます。</p>
+        <ul>
+          <li><b>毎月1日〜月末</b>：カレンダーどおりです（最初はこれ）。</li>
+          <li><b>毎月◯日から</b>：例えば25日にすると「25日〜翌月24日」で集計します。</li>
+          <li><b>給料日から</b>：固定収支に登録した給料を選ぶと、<b>給料が明細に入った日から、次の給料日の前日まで</b>で集計します。土日祝で前にずれた日や、「その月だけ変更」で変えた日にも自動で合わせます。</li>
+        </ul>
+        <ul>
+          <li>期間は始まる月の名前で呼びます。例：10/23〜11/24 は「10月度」。月の表示の下に、実際の期間（日付と曜日）が出ます。</li>
+          <li>合計・カテゴリ別グラフ・明細・年月を選ぶ画面の件数は、すべてこの期間で数えます。</li>
+          <li>日付なしの固定収支は、その月に始まる期間に入ります。</li>
+          <li>給料日から集計するには、給料を「日付あり」の固定収支として登録しておく必要があります。</li>
         </ul>
       </details>
 
@@ -533,9 +561,13 @@
           </div>
           <div class="mp-months" id="mpMonths"></div>
         </div>
-        <button id="thisMonth" title="今月に戻る">今月</button>
+        <button id="thisMonth" title="今の期間に戻る">今月</button>
       </div>
       <button id="next">次月 ▶</button>
+    </div>
+    <div class="period-line">
+      <span id="periodRange"></span>
+      <button id="periodBtn" title="集計期間（何日から何日までを1か月とするか）を設定">⚙ 集計期間</button>
     </div>
     <div class="summary">
       <div>収入<strong class="income" id="sumIncome"></strong></div>
@@ -555,6 +587,27 @@
   </section>
   </div>
   </div>
+
+  <dialog id="periodDialog" class="modal" aria-labelledby="periodTitle">
+    <form id="periodForm" method="dialog" class="period-form">
+      <h3 id="periodTitle">集計期間の設定</h3>
+      <p class="hint" style="margin:0">何日から何日までを「1か月」として集計するかを選びます。</p>
+      <label class="period-opt"><input type="radio" name="pMode" value="calendar">
+        <span><b>毎月1日〜月末</b><small>カレンダーどおり</small></span></label>
+      <label class="period-opt"><input type="radio" name="pMode" value="day">
+        <span><b>毎月 <input type="number" id="pDay" min="1" max="31" value="25" aria-label="開始日"> 日から、翌月のその前日まで</b>
+        <small>例：25日にすると「25日〜翌月24日」。その月にない日（31日など）は月末から始まります</small></span></label>
+      <label class="period-opt"><input type="radio" name="pMode" value="payday">
+        <span><b>給料日から、次の給料日の前日まで</b>
+        <select id="pFixed" aria-label="給料にあたる固定収支"></select>
+        <small id="pFixedHint">給料が明細に入る日（土日祝でずれた日や「その月だけ変更」した日も含む）から集計します</small></span></label>
+      <div class="ov-actions">
+        <span></span>
+        <button type="button" id="periodCancel">キャンセル</button>
+        <button type="submit" class="primary">保存</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="catDelDialog" class="modal" aria-labelledby="catDelTitle">
     <form id="catDelForm" method="dialog">
@@ -847,6 +900,58 @@
       overridden: !!ov,
     };
   }
+
+  // ---- 集計期間 ----
+  // period = { mode: "calendar" | "day" | "payday", day: 開始日（day のとき）, fixedId: 給料の固定収支 id（payday のとき） }
+  // 期間は始まる月の名前で呼ぶ（10/23〜11/24 なら「10月度」）。current はその「始まる月」の1日
+  const PERIOD_KEY = "kakeibo-period";
+  const validPeriod = p => p && ["calendar", "day", "payday"].includes(p.mode);
+  let period = (() => { try { const p = JSON.parse(localStorage.getItem(PERIOD_KEY)); if (validPeriod(p)) return p; } catch {} return { mode: "calendar", day: 25, fixedId: null }; })();
+  const pad2 = n => String(n).padStart(2, "0");
+  const ymOf = d => d.slice(0, 7);
+  const addMonths = (ym, n) => { const [y, m] = ym.split("-").map(Number); return toYm(new Date(y, m - 1 + n, 1)); };
+  const todayStr = () => { const d = new Date(); return `${toYm(d)}-${pad2(d.getDate())}`; };
+  // 給料日スタートに使える固定収支（日付のある収入）
+  const paydayCandidates = () => fixed.filter(f => typeOf(f) === "income" && f.day != null);
+  const paydayFixed = () => period.mode === "payday" ? paydayCandidates().find(f => f.id === period.fixedId) : null;
+
+  // ym の月のうち、期間が始まる日
+  function periodStartDay(ym) {
+    const [y, m] = ym.split("-").map(Number), last = new Date(y, m, 0).getDate();
+    if (period.mode === "day") return Math.min(Math.max(1, period.day || 1), last);
+    const f = paydayFixed();
+    if (f) {
+      // 実際に明細に給料が入る日（土日祝のずらし・その月だけの変更を反映）
+      const r = applyOverride(f, ym, y, m, last);
+      if (!r.noDay && !r.skipped) return Number(r.date.slice(8));
+      return shiftHoliday(y, m, Math.min(f.day, last), f.shift); // その月は給料なし等 → いつもの給料日
+    }
+    return 1; // カレンダーどおり（給料の固定収支が削除された場合も）
+  }
+  // ym に始まる期間の最初と最後の日（"YYYY-MM-DD"）
+  function periodOf(ym) {
+    const start = `${ym}-${pad2(periodStartDay(ym))}`;
+    const next = addMonths(ym, 1), [ny, nm] = next.split("-").map(Number);
+    const endD = new Date(ny, nm - 1, periodStartDay(next) - 1); // 次の期間が始まる前の日
+    return { start, end: `${toYm(endD)}-${pad2(endD.getDate())}` };
+  }
+  // その日付がどの期間（の始まる月）に入るか
+  function periodYmOf(date) {
+    const ym = ymOf(date);
+    return date < periodOf(ym).start ? addMonths(ym, -1) : ym;
+  }
+  // ym に始まる期間の明細（ふだんの記録＋固定収支）
+  function periodRecords(ym) {
+    const { start, end } = periodOf(ym);
+    const inRange = d => d >= start && d <= end;
+    return entries.filter(e => inRange(e.date))
+      // 日付なしの固定収支は、その月に始まる期間に入れる
+      .concat(fixedEntriesFor(ym).filter(e => e.noDay || inRange(e.date)))
+      .concat(fixedEntriesFor(addMonths(ym, 1)).filter(e => !e.noDay && inRange(e.date)));
+  }
+  const ymToParts = ym => ym.split("-").map(Number);
+  const ymToDate = ym => { const [y, m] = ymToParts(ym); return new Date(y, m - 1, 1); };
+
   $("date").valueAsDate = new Date();
 
   $("form").addEventListener("submit", e => {
@@ -860,7 +965,7 @@
       memo: $("memo").value.trim(),
     });
     save();
-    current = new Date($("date").value); current.setDate(1); // 追加した月を表示
+    current = ymToDate(periodYmOf($("date").value)); // 追加した日が入る期間を表示
     $("amount").value = ""; $("memo").value = "";
     document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
     $("ocrResult").hidden = true;
@@ -881,10 +986,11 @@
   let pickerYear = null;
   function renderPicker() {
     $("mpYear").textContent = `${pickerYear}年`;
-    const now = toYm(new Date()), sel = toYm(current);
+    const now = periodYmOf(todayStr()), sel = toYm(current);
     $("mpMonths").innerHTML = Array.from({ length: 12 }, (_, i) => {
       const ym = `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
-      const n = entries.filter(e => e.date.startsWith(ym)).length;
+      const { start, end } = periodOf(ym);
+      const n = entries.filter(e => e.date >= start && e.date <= end).length;
       const cls = [ym === sel && "selected", ym === now && "today"].filter(Boolean).join(" ");
       return `<button class="${cls}" data-month="${i + 1}">${i + 1}月${n ? `<small>${n}件</small>` : "<small>&nbsp;</small>"}</button>`;
     }).join("");
@@ -911,12 +1017,19 @@
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && !$("monthPicker").hidden) { setPicker(false); $("monthLabel").focus(); }
   });
-  $("thisMonth").addEventListener("click", () => { const d = new Date(); goToMonth(d.getFullYear(), d.getMonth() + 1); });
+  $("thisMonth").addEventListener("click", () => goToMonth(...ymToParts(periodYmOf(todayStr()))));
 
   function render() {
     const ym = toYm(current);
-    $("monthLabel").textContent = `${current.getFullYear()}年 ${current.getMonth() + 1}月 ▾`;
-    $("thisMonth").hidden = ym === toYm(new Date());
+    const calendar = periodStartDay(ym) === 1 && periodStartDay(addMonths(ym, 1)) === 1;
+    $("monthLabel").textContent = `${current.getFullYear()}年 ${current.getMonth() + 1}月${calendar ? "" : "度"} ▾`;
+    $("thisMonth").hidden = ym === periodYmOf(todayStr());
+    // 期間の表示（例：10/23（金）〜 11/24（火））
+    const wd = s => "日月火水木金土"[new Date(`${s}T00:00:00`).getDay()];
+    const md = s => `${Number(s.slice(5, 7))}/${Number(s.slice(8))}（${wd(s)}）`;
+    const p = periodOf(ym);
+    $("periodRange").textContent = `${md(p.start)} 〜 ${md(p.end)}` +
+      (period.mode === "payday" && !paydayFixed() ? "　※給料の固定収支が見つからないため、1日〜月末で集計中" : "");
 
     // 固定収支の一覧（登録済みのものすべて）。収入→支出、その中は金額の大きい順
     const thisMonth = toYm(new Date());
@@ -941,8 +1054,7 @@
           </tr>`;
         }).join("");
 
-    const month = entries.filter(e => e.date.startsWith(ym))
-      .concat(fixedEntriesFor(ym))
+    const month = periodRecords(ym)
       .sort((a, b) => b.date.localeCompare(a.date));
     const counted = month.filter(e => !e.skipped); // 「この月はなし」にしたものは合計に入れない
     const sumOf = type => counted.filter(e => typeOf(e) === type).reduce((s, e) => s + e.amount, 0);
@@ -1300,7 +1412,7 @@
   }
 
   function buildBackup() {
-    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme, categories };
+    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme, categories, period };
   }
   $("exportBtn").addEventListener("click", () => {
     const d = new Date();
@@ -1360,6 +1472,10 @@
       ? pendingImport.categories : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
     ensureCategoriesFromData();
     refreshCategorySelects(); renderCatManager();
+    // 集計期間も置き換える（古い書き出しファイルには無いので、そのときは1日〜月末）
+    period = validPeriod(pendingImport.period) ? pendingImport.period : { mode: "calendar", day: 25, fixedId: null };
+    lsSet(PERIOD_KEY, JSON.stringify(period));
+    current = ymToDate(periodYmOf(todayStr()));
     finishImport(`置き換えました（記録 ${entries.length}件・固定収支 ${fixed.length}件）。`);
   });
   $("importMerge").addEventListener("click", () => {
@@ -1379,6 +1495,40 @@
     finishImport(`追加しました（記録 ${newEntries.length}件・固定収支 ${newFixed.length}件。すでにあった ${pendingImport.entries.length - newEntries.length + pendingImport.fixed.length - newFixed.length}件は重複なのでとばしました）。`);
   });
   $("importCancel").addEventListener("click", () => { $("importDialog").close(); pendingImport = null; });
+
+  // ---- 集計期間の設定画面 ----
+  function openPeriodDialog() {
+    const cands = paydayCandidates();
+    const shiftLabel = { before: "・土日祝は前の平日", after: "・土日祝は次の平日" };
+    $("pFixed").innerHTML = cands.map(f =>
+      `<option value="${f.id}">${escapeHtml(f.name)}（毎月${f.day}日${shiftLabel[f.shift] || ""}）</option>`).join("");
+    const payRadio = document.querySelector("input[name=pMode][value=payday]");
+    payRadio.disabled = cands.length === 0;
+    $("pFixed").disabled = cands.length === 0;
+    $("pFixedHint").textContent = cands.length === 0
+      ? "先に「毎月の固定収支」で、日付のある収入（給料など）を登録すると選べます"
+      : "給料が明細に入る日（土日祝でずれた日や「その月だけ変更」した日も含む）から集計します";
+    if (cands.some(f => f.id === period.fixedId)) $("pFixed").value = period.fixedId;
+    $("pDay").value = period.day || 25;
+    const mode = period.mode === "payday" && !paydayFixed() ? "calendar" : period.mode;
+    document.querySelector(`input[name=pMode][value=${mode}]`).checked = true;
+    $("periodDialog").showModal();
+  }
+  $("periodBtn").addEventListener("click", openPeriodDialog);
+  // 日付や給料を選んだら、そのオプションも選ばれた状態にする
+  $("pDay").addEventListener("input", () => { document.querySelector("input[name=pMode][value=day]").checked = true; });
+  $("pFixed").addEventListener("change", () => { document.querySelector("input[name=pMode][value=payday]").checked = true; });
+  $("periodCancel").addEventListener("click", () => $("periodDialog").close());
+  $("periodForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const mode = checkedType("pMode");
+    const day = Math.min(31, Math.max(1, Math.round(Number($("pDay").value)) || 1));
+    period = { mode: mode === "day" && day === 1 ? "calendar" : mode, day, fixedId: Number($("pFixed").value) || null };
+    lsSet(PERIOD_KEY, JSON.stringify(period));
+    scheduleAutoSave();
+    $("periodDialog").close();
+    goToMonth(...ymToParts(periodYmOf(todayStr()))); // 今日が入る期間を表示
+  });
 
   // ---- カテゴリの管理 ----
   const catType = () => checkedType("catType");
@@ -1681,6 +1831,7 @@
   setMenu(narrow.matches ? false : savedMenuOpen());
   requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(".layout").style.transition = ""));
 
+  current = ymToDate(periodYmOf(todayStr())); // 最初は今日が入る期間を表示
   resetFixedForm();
   render();
 </script>
