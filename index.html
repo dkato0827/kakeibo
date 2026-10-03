@@ -105,7 +105,8 @@
   .status { font-size: .7rem; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); margin-left: 4px; }
   tr.editing td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   tr.ended td:not(:last-child) { opacity: .55; }
-  #fCancel { cursor: pointer; }
+  #fCancel, #entryCancel { cursor: pointer; }
+  #entryCancel[hidden] { display: none; }
   .day-field { display: flex; flex-direction: column; gap: 6px; }
   label.check { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
   label.check input { width: auto; margin: 0; }
@@ -305,11 +306,13 @@
         <summary>✏️ 記録を追加する</summary>
         <ol>
           <li>「支出」か「収入」を選びます。</li>
-          <li>日付・金額・カテゴリ・メモを入れて「追加する」を押します。</li>
+          <li>名前・金額・カテゴリ・日付を入れて「追加する」を押します。補足があれば「メモ」にも書けます（なくても可。明細に 📝 付きで表示されます）。</li>
         </ol>
         <ul>
+          <li>項目の並び（名前・金額 → カテゴリ・日付 → メモ）は、「毎月の固定収支」と同じです。</li>
           <li>追加すると、右側がその日付の月に切り替わります。</li>
-          <li>間違えた記録は、明細の <b>✕</b> で削除できます。</li>
+          <li>あとから直したいときは、明細の「<b>編集</b>」を押します。内容がこのフォームに読み込まれるので、直して「更新する」を押します（やめるときは「編集をやめる」）。</li>
+          <li>いらない記録は、明細の <b>✕</b> で削除できます。</li>
         </ul>
       </details>
 
@@ -317,7 +320,7 @@
         <summary>📷 レシートを読み取る</summary>
         <ol>
           <li>レシートの画像を、点線の枠にドラッグ＆ドロップします（枠をクリックして選ぶ・Ctrl+V で貼り付けも可）。</li>
-          <li>日付・金額・店名・カテゴリが読み取られ、フォームに入ります（緑の枠）。</li>
+          <li>日付・金額・店名・カテゴリが読み取られ、フォームに入ります（緑の枠。店名は「名前」の欄に入ります）。</li>
           <li><b>内容を確認・修正してから</b>「追加する」を押します。自動では追加されません。</li>
         </ol>
         <ul>
@@ -328,13 +331,14 @@
 
       <details>
         <summary>🔁 毎月の固定収支（給料・家賃など）</summary>
-        <p>一度登録すると、毎月自動で計上されます。</p>
+        <p>一度登録すると、毎月自動で計上されます。項目は上から次の順に並んでいます（名前・金額・カテゴリ・日付・メモは「記録を追加」と同じ並び）。</p>
         <ul>
+          <li><b>名前・金額・カテゴリ</b>：「家賃・70,000円・住居・光熱」のように入れます。</li>
           <li><b>毎月の日付</b>：その日に計上されます。31日など、その月にない日は月末になります。</li>
-          <li><b>土日・祝日に当たったら</b>：「直前の平日にずらす」「直後の平日にずらす」を選べます（給料日などに）。祝日は振替休日も含めて自動で判定します。</li>
           <li><b>日付は決めない</b>：毎月あるけれど日付がまちまちなものに。明細では「日付なし」として一番下に出ます。</li>
-          <li><b>メモ</b>：支払い方法や契約内容などを書いておけます（なくても可）。明細と登録済み一覧に 📝 付きで表示されます。</li>
+          <li><b>土日・祝日に当たったら</b>：「直前の平日にずらす」「直後の平日にずらす」を選べます（給料日などに）。祝日は振替休日も含めて自動で判定します。</li>
           <li><b>開始月・終了月</b>：その期間だけ計上されます。終了月が空欄なら無期限です。</li>
+          <li><b>メモ</b>：支払い方法や契約内容などを書いておけます（なくても可）。明細と登録済み一覧に 📝 付きで表示されます。</li>
         </ul>
         <p><b>登録済み一覧</b>から、あとで変更・削除できます。</p>
         <ul>
@@ -493,13 +497,16 @@
         <label><input type="radio" name="type" value="expense" checked>支出</label>
         <label><input type="radio" name="type" value="income">収入</label>
       </div>
-      <label>日付<input type="date" id="date" required></label>
+      <!-- 項目の並びは「毎月の固定収支」とそろえる：名前・金額 → カテゴリ・日付 → メモ -->
+      <label>名前<input type="text" id="memo" placeholder="ランチ など"></label>
       <label>金額（円）<input type="number" id="amount" min="1" step="1" required placeholder="1200"></label>
       <label>カテゴリ
         <select id="category"></select>
       </label>
-      <label>メモ<input type="text" id="memo" placeholder="ランチ など"></label>
-      <button class="primary wide" type="submit">追加する</button>
+      <label>日付<input type="date" id="date" required></label>
+      <label class="wide">メモ（なくても可）<input type="text" id="entryNote" maxlength="100" placeholder="例：〇〇さんと・カード払い"></label>
+      <button class="primary wide" type="submit" id="entrySubmit">追加する</button>
+      <button class="wide" type="button" id="entryCancel" hidden>編集をやめる</button>
     </form>
   </section>
 
@@ -526,9 +533,9 @@
           <option value="after">直後の平日にずらす</option>
         </select>
       </label>
-      <label class="wide">メモ（なくても可）<input type="text" id="fMemo" maxlength="100" placeholder="例：口座振替（〇〇銀行）"></label>
       <label>開始月<input type="month" id="fStart" required></label>
       <label>終了月（空欄なら無期限）<input type="month" id="fEnd"></label>
+      <label class="wide">メモ（なくても可）<input type="text" id="fMemo" maxlength="100" placeholder="例：口座振替（〇〇銀行）"></label>
       <button class="primary wide" type="submit" id="fSubmit">登録する</button>
       <button class="wide" type="button" id="fCancel" hidden>編集をやめる</button>
     </form>
@@ -995,22 +1002,55 @@
 
   $("date").valueAsDate = new Date();
 
+  let editingEntryId = null; // 編集中の記録の id（新しく追加するときは null）
+
+  // 明細の「編集」で、その記録の内容を「記録を追加」のフォームに読み込む
+  function startEntryEdit(entry) {
+    editingEntryId = entry.id;
+    document.querySelector(`input[name=type][value=${typeOf(entry)}]`).checked = true;
+    syncForm();
+    setCategories("category", typeOf(entry), entry.category);
+    $("date").value = entry.date;
+    $("amount").value = entry.amount;
+    $("memo").value = entry.memo || "";
+    $("entryNote").value = entry.note || "";
+    document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
+    $("ocrResult").hidden = true;
+    $("entrySubmit").textContent = "更新する";
+    $("entryCancel").hidden = false;
+    if (!menuIsOpen()) setMenu(true); // 入力メニューを閉じていたら開く
+    $("form").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("amount").focus();
+    render();
+  }
+  // フォームを「新しく追加」の状態に戻す（日付はそのまま）
+  function resetEntryForm() {
+    editingEntryId = null;
+    $("amount").value = ""; $("memo").value = ""; $("entryNote").value = "";
+    $("entrySubmit").textContent = "追加する";
+    $("entryCancel").hidden = true;
+  }
+  $("entryCancel").addEventListener("click", () => { resetEntryForm(); render(); });
+
   $("form").addEventListener("submit", e => {
     e.preventDefault();
-    entries.push({
-      id: Date.now(),
+    const data = {
       type: checkedType("type"),
       date: $("date").value,
       amount: Number($("amount").value),
       category: $("category").value,
-      memo: $("memo").value.trim(),
-    });
+      memo: $("memo").value.trim(),      // 画面上の「名前」（以前は「メモ」という名前の欄だった）
+      note: $("entryNote").value.trim(), // 画面上の「メモ」（固定収支のメモと同じ扱い）
+    };
+    const editing = entries.find(x => x.id === editingEntryId);
+    if (editing) Object.assign(editing, data);
+    else entries.push({ id: Date.now(), ...data });
     save();
-    current = ymToDate(periodYmOf($("date").value)); // 追加した日が入る期間を表示
-    $("amount").value = ""; $("memo").value = "";
+    current = ymToDate(periodYmOf(data.date)); // 追加・更新した日が入る期間を表示
+    resetEntryForm();
     document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
     $("ocrResult").hidden = true;
-    $("amount").focus();
+    $("memo").focus(); // 次の記録は一番上の「名前」から入れられるように
     render();
   });
 
@@ -1138,7 +1178,7 @@
     $("list").innerHTML = month.length === 0
       ? `<tr><td class="empty">明細はありません</td></tr>`
       : month.map(e => `
-          <tr class="${e.skipped ? "skipped" : ""}">
+          <tr class="${e.skipped ? "skipped" : ""} ${!e.fixed && e.id === editingEntryId ? "editing" : ""}">
             <td>${e.noDay ? '<span class="no-day">日付なし</span>' : e.date.slice(5).replace("-", "/")}</td>
             <td>${escapeHtml(e.category)}${e.fixed ? '<span class="badge">固定</span>' : ""}${
               e.skipped ? '<span class="status">この月はなし</span>' : e.overridden ? '<span class="status">この月だけ変更</span>' : ""}
@@ -1146,15 +1186,18 @@
             <td class="num">${signedYen(e)}</td>
             <td style="white-space:nowrap">${e.fixed
               ? `<button class="edit" data-fixed-id="${e.fixedId}" data-ym="${e.ym}" title="この月だけ金額や日付を変える">変更</button>`
-              : `<button class="del" data-id="${e.id}" title="削除">✕</button>`}</td>
+              : `<button class="edit" data-edit-entry="${e.id}" title="この記録を直す">編集</button>
+                 <button class="del" data-id="${e.id}" title="削除">✕</button>`}</td>
           </tr>`).join("");
   }
 
   $("list").addEventListener("click", e => {
     if (e.target.dataset.fixedId) return openOverride(Number(e.target.dataset.fixedId), e.target.dataset.ym);
+    if (e.target.dataset.editEntry) return startEntryEdit(entries.find(x => x.id === Number(e.target.dataset.editEntry)));
     const id = Number(e.target.dataset.id);
     if (!id || !confirm("この明細を削除しますか？")) return;
     entries = entries.filter(x => x.id !== id);
+    if (editingEntryId === id) resetEntryForm(); // 編集中の記録を消したら、フォームを元に戻す
     save(); render();
   });
 
@@ -1332,6 +1375,7 @@
   async function readReceipt(file) {
     if (!file || !file.type.startsWith("image/")) { alert("画像ファイル（JPEG・PNG など）を選んでください。"); return; }
     if (!menuIsOpen()) setMenu(true); // メニューを閉じていても、読み取り結果のフォームが見えるように開く
+    if (editingEntryId) { resetEntryForm(); render(); } // 編集中だったら、新しい記録として読み取る
     $("dropIdle").hidden = true; $("dropBusy").hidden = false; $("ocrResult").hidden = true;
     $("receiptPreview").src = URL.createObjectURL(file);
     $("ocrStatus").textContent = "準備中…"; $("ocrProgress").style.width = "0%";
