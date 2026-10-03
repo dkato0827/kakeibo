@@ -1,0 +1,1476 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 検索エンジンに載せない・リンクをたどらせない（URL を知っている人だけが使う想定） -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<!-- リンクを開いたときに、どこから来たか（このページの URL）を相手のサイトに伝えない -->
+<meta name="referrer" content="no-referrer">
+<title>かんたん家計簿</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --field: #f6f5f2; --text: #222; --muted: #777; --line: #e3e1dc;
+    --accent: #2f7d62; --on-accent: #ffffff; --danger: #c0473a; --income: #2563b8; --expense: #d0312d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1c1e; --card: #26282b; --field: #1b1c1e; --text: #eeeeee; --muted: #9a9a9a; --line: #3a3c40;
+      --accent: #5cc29b; --on-accent: #10251d; --danger: #e5776b; --income: #6fa8f0; --expense: #f07067;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+  /* 左: 入力メニュー（記録の追加・固定収支。開閉できる） / 右: 月ごとの表示（まとめ・グラフ・明細） */
+  .layout { display: grid; grid-template-columns: 0px minmax(0, 1fr); column-gap: 0; align-items: start;
+    transition: grid-template-columns .25s ease, column-gap .25s ease; }
+  body.menu-open .layout { grid-template-columns: 440px minmax(0, 1fr); column-gap: 16px; }
+  .col-input { min-width: 0; overflow: hidden; visibility: hidden; opacity: 0; transition: opacity .2s, visibility .2s; }
+  .col-input > * { width: 440px; }
+  body.menu-open .col-input { visibility: visible; opacity: 1; }
+  .menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .menu-head strong { font-size: 1rem; }
+  #menuClose { cursor: pointer; padding: 4px 10px; }
+  #menuToggle { cursor: pointer; }
+  header .title { display: flex; align-items: center; gap: 12px; }
+  .backdrop { display: none; }
+  /* 右の列はスクロールしても画面に残る。月・まとめ・グラフは常に見え、明細だけが中でスクロール */
+  .col-month { position: sticky; top: 16px; max-height: calc(100vh - 80px); display: flex; flex-direction: column; }
+  .col-month .card { flex-shrink: 0; }
+  .col-month .list-card { flex: 1 1 auto; min-height: 180px; margin-bottom: 0; display: flex; flex-direction: column; }
+  .list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  /* 画面が狭いときは、月ごとの表示を1列で出し、入力メニューは左から引き出す */
+  @media (max-width: 900px) {
+    .layout, body.menu-open .layout { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+    .col-month { position: static; max-height: none; display: block; }
+    .col-month .list-card { display: block; }
+    .col-input { position: fixed; top: 0; bottom: 0; left: 0; z-index: 20; width: min(440px, 90vw);
+      overflow-y: auto; background: var(--bg); padding: 16px; box-shadow: 4px 0 24px rgba(0,0,0,.25);
+      transform: translateX(-105%); transition: transform .25s ease, visibility .25s; opacity: 1; }
+    .col-input > * { width: auto; }
+    body.menu-open .col-input { transform: none; }
+    body.menu-open .backdrop { display: block; position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.35); }
+    body.menu-open { overflow: hidden; }
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 16px; }
+  h2 { font-size: 1rem; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  form label input, form label select { width: 100%; min-width: 0; }
+  form .wide { grid-column: 1 / -1; }
+  label { display: flex; flex-direction: column; font-size: .8rem; color: var(--muted); gap: 4px; }
+  input, select, button {
+    font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  input, select { background: var(--field); }
+  button.primary { background: var(--accent); color: var(--on-accent); border: none; cursor: pointer; font-weight: 600; }
+  .month-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .month-bar button { cursor: pointer; }
+  .month-jump { position: relative; display: flex; align-items: center; gap: 8px; }
+  #monthLabel { font-weight: 700; font-size: 1.05rem; background: none; border: 1px solid transparent; }
+  #monthLabel:hover, #monthLabel:focus-visible { border-color: var(--line); background: var(--field); }
+  .month-picker { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 5;
+    width: 260px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  .mp-year { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .mp-year button { padding: 4px 10px; }
+  .mp-months { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mp-months button { padding: 8px 0; font-size: .9rem; }
+  .mp-months button.today { border-color: var(--accent); }
+  .mp-months button.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
+  .mp-months small { display: block; font-size: .6rem; color: var(--muted); }
+  .mp-months button.selected small { color: inherit; }
+  #thisMonth { font-size: .8rem; padding: 4px 10px; }
+  #thisMonth[hidden] { display: none; }
+  .total { font-size: 2rem; font-weight: 700; text-align: center; margin: 8px 0 0; }
+  .bars .row { display: grid; grid-template-columns: 6em 1fr 7em; align-items: center; gap: 8px; margin: 6px 0; font-size: .9rem; }
+  .bars .track { background: var(--bg); border-radius: 6px; height: 14px; overflow: hidden; }
+  .bars .fill { background: var(--accent); height: 100%; border-radius: 6px; }
+  .bars .amt { text-align: right; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  td { padding: 8px 4px; border-top: 1px solid var(--line); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td .memo { color: var(--muted); font-size: .8rem; }
+  .del { background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px; }
+  .empty { color: var(--muted); text-align: center; padding: 12px; }
+  .badge { display: inline-block; font-size: .7rem; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: var(--on-accent); margin-left: 4px; vertical-align: middle; }
+  .hint { color: var(--muted); font-size: .8rem; margin: 8px 0 0; line-height: 1.6; }
+  .edit { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: .8rem; white-space: nowrap; }
+  .status { font-size: .7rem; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); margin-left: 4px; }
+  tr.editing td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  tr.ended td:not(:last-child) { opacity: .55; }
+  #fCancel { cursor: pointer; }
+  .day-field { display: flex; flex-direction: column; gap: 6px; }
+  label.check { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
+  label.check input { width: auto; margin: 0; }
+  input:disabled, select:disabled { opacity: .45; }
+  .no-day { color: var(--muted); font-size: .8rem; }
+  tr.skipped td:not(:last-child) { opacity: .5; }
+  tr.skipped .num span { text-decoration: line-through; }
+  #ovDialog { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; width: min(440px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #ovDialog::backdrop { background: rgba(0,0,0,.35); }
+  #ovDialog h3 { margin: 0; font-size: 1.05rem; }
+  #ovDialog .hint { margin: 0 0 4px; }
+  .ov-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .ov-actions span { flex: 1; }
+  .ov-actions button { cursor: pointer; }
+  #ovReset[hidden] { display: none; }
+  header { flex-wrap: wrap; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .data-h { font-size: .9rem; margin: 16px 0 6px; }
+  .notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); font-size: .9rem; }
+  .notice[hidden] { display: none; }
+  .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .notice-actions button { cursor: pointer; padding: 6px 12px; }
+  #helpDialog { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 0; width: min(640px, calc(100vw - 32px)); max-height: 85vh; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #helpDialog[open] { display: flex; flex-direction: column; }
+  #helpDialog::backdrop { background: rgba(0,0,0,.35); }
+  .help-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .help-head h3 { margin: 0; font-size: 1.1rem; }
+  .help-head button { cursor: pointer; }
+  .help-body { overflow-y: auto; padding: 8px 18px 18px; font-size: .9rem; line-height: 1.7; }
+  .help-lead { color: var(--muted); }
+  .help-body details { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; padding: 0 12px; }
+  .help-body summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+  .help-body details[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .help-body ul, .help-body ol { padding-left: 1.3em; margin: 6px 0 10px; }
+  .help-body p { margin: 6px 0; }
+  .header-actions button { cursor: pointer; }
+  .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .data-actions button { cursor: pointer; padding: 10px 16px; }
+  #importDialog { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; width: min(460px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #importDialog::backdrop { background: rgba(0,0,0,.35); }
+  #importDialog h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  #importSummary { font-size: .9rem; line-height: 1.6; white-space: pre-line; }
+  .import-choices { display: grid; gap: 8px; margin-bottom: 8px; }
+  .import-choices button { cursor: pointer; text-align: left; padding: 10px 14px; font-weight: 600; }
+  .import-choices small { display: block; font-weight: 400; font-size: .75rem; opacity: .8; margin-top: 2px; }
+  .drop-zone { border: 2px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center;
+    color: var(--muted); cursor: pointer; margin-bottom: 12px; transition: border-color .15s, background .15s; }
+  .drop-zone small { font-size: .75rem; }
+  .drop-zone.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text); }
+  #dropBusy { display: flex; align-items: center; gap: 12px; text-align: left; }
+  #dropBusy[hidden] { display: none; }
+  #dropBusy > div { flex: 1; }
+  #dropBusy .track { background: var(--bg); border-radius: 6px; height: 8px; overflow: hidden; margin-top: 6px; }
+  #dropBusy .fill { background: var(--accent); height: 100%; transition: width .2s; }
+  #receiptPreview { width: 56px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+  #ocrResult { margin-bottom: 12px; font-size: .85rem; }
+  .ocr-msg { margin: 0 0 6px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .ocr-msg.warn { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+  #ocrResult summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+  #ocrText { white-space: pre-wrap; font-size: .75rem; max-height: 200px; overflow: auto; background: var(--bg); padding: 8px; border-radius: 6px; }
+  input.filled { outline: 2px solid var(--accent); }
+  .income { color: var(--income); }
+  .expense-amt { color: var(--expense); }
+  .bars .amt { color: var(--expense); }
+  .summary strong.income { color: var(--income); }
+  .summary strong.expense-amt { color: var(--expense); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+  header h1 { margin: 0; }
+  #themeToggle { cursor: pointer; }
+  .theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .theme-grid label { flex-direction: row; align-items: center; justify-content: space-between; color: var(--text); font-size: .9rem;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 6px 6px 10px; }
+  .theme-grid input[type=color] { width: 44px; height: 32px; padding: 2px; cursor: pointer; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .presets button { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: .85rem; }
+  .presets .swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.15); }
+  .theme-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+  .theme-actions button { cursor: pointer; }
+  @media (max-width: 480px) { .theme-grid { grid-template-columns: 1fr; } }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; text-align: center; }
+  .summary div { font-size: .8rem; color: var(--muted); }
+  .summary strong { display: block; font-size: 1.1rem; color: var(--text); font-variant-numeric: tabular-nums; }
+  .summary .balance strong { font-size: 1.4rem; }
+  .type-toggle { display: flex; gap: 0; grid-column: 1 / -1; }
+  .type-toggle label { flex: 1; flex-direction: row; justify-content: center; align-items: center; gap: 6px;
+    border: 1px solid var(--line); padding: 8px; cursor: pointer; color: var(--text); font-size: .9rem; }
+  .type-toggle label:first-child { border-radius: 8px 0 0 8px; }
+  .type-toggle label:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .type-toggle input { display: none; }
+  .type-toggle label:has(input:checked) { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="title">
+      <button id="menuToggle" aria-controls="inputMenu" aria-expanded="false">☰ 入力メニュー</button>
+      <h1>かんたん家計簿</h1>
+    </div>
+    <div class="header-actions">
+      <button id="helpOpen" aria-haspopup="dialog">❓ 使い方</button>
+      <button id="dataToggle" aria-expanded="false" aria-controls="dataPanel">💾 データ</button>
+      <button id="themeToggle" aria-expanded="false">🎨 色を変える</button>
+    </div>
+  </header>
+
+  <section class="card" id="dataPanel" hidden>
+    <h2>データの保存・バックアップ</h2>
+
+    <h3 class="data-h">自動保存ファイル</h3>
+    <p class="hint" style="margin-top:0">
+      保存先のファイルを1回選ぶと、記録するたびにそのファイルへ自動で保存します。
+      OneDrive や Google ドライブのフォルダに置くと、パソコンが壊れても安心です。（Edge・Chrome で使えます）
+    </p>
+    <div class="data-actions">
+      <button class="primary" id="autoSaveSetup">保存先ファイルを選ぶ</button>
+      <button id="autoSaveResume" hidden>自動保存を再開する</button>
+      <button id="autoSaveStop" hidden>自動保存をやめる</button>
+    </div>
+    <p class="hint" id="autoSaveStatus"></p>
+
+    <h3 class="data-h">手動で書き出し・読み込み</h3>
+    <p class="hint" style="margin-top:0">
+      記録・固定収支・色の設定を1つのファイルに保存できます。バックアップや、別のパソコンへの引っ越しに使ってください。
+      自動保存ファイルも、ここから読み込めます。
+    </p>
+    <div class="data-actions">
+      <button id="exportBtn">書き出す（ファイルに保存）</button>
+      <button id="importBtn">読み込む（ファイルから戻す）</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <p class="hint" id="dataInfo"></p>
+  </section>
+
+  <dialog id="helpDialog" aria-labelledby="helpTitle">
+    <div class="help-head">
+      <h3 id="helpTitle">かんたん家計簿の使い方</h3>
+      <button id="helpClose">✕ 閉じる</button>
+    </div>
+    <div class="help-body">
+      <p class="help-lead">
+        毎日の支出・収入と、給料や家賃のような毎月決まった収支を記録して、月ごとの合計を確認できる家計簿です。
+        見出しを押すと、くわしい説明が開きます。
+      </p>
+
+      <details open>
+        <summary>🧭 画面の見方</summary>
+        <ul>
+          <li><b>左側（入力メニュー）</b>：記録の追加と、毎月の固定収支の登録をします。左上の「☰ 入力メニュー」で開いたり閉じたりできます。</li>
+          <li><b>右側（月の表示）</b>：表示している月の収入・支出・収支の合計、支出のカテゴリ別グラフ、明細が出ます。</li>
+          <li>スマホなど画面が狭いときは、入力メニューは左から引き出す形になります。暗い所を押すと閉じます。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>✏️ 記録を追加する</summary>
+        <ol>
+          <li>「支出」か「収入」を選びます。</li>
+          <li>日付・金額・カテゴリ・メモを入れて「追加する」を押します。</li>
+        </ol>
+        <ul>
+          <li>追加すると、右側がその日付の月に切り替わります。</li>
+          <li>間違えた記録は、明細の <b>✕</b> で削除できます。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>📷 レシートを読み取る</summary>
+        <ol>
+          <li>レシートの画像を、点線の枠にドラッグ＆ドロップします（枠をクリックして選ぶ・Ctrl+V で貼り付けも可）。</li>
+          <li>日付・金額・店名・カテゴリが読み取られ、フォームに入ります（緑の枠）。</li>
+          <li><b>内容を確認・修正してから</b>「追加する」を押します。自動では追加されません。</li>
+        </ol>
+        <ul>
+          <li>読み取りはこの端末の中だけで行い、画像は外部に送られません。初回だけ日本語の認識データをダウンロードします。</li>
+          <li>斜め・暗い・しわのある写真は読み間違いが増えます。正面から明るく撮るのがコツです。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>🔁 毎月の固定収支（給料・家賃など）</summary>
+        <p>一度登録すると、毎月自動で計上されます。</p>
+        <ul>
+          <li><b>毎月の日付</b>：その日に計上されます。31日など、その月にない日は月末になります。</li>
+          <li><b>土日・祝日に当たったら</b>：「直前の平日にずらす」「直後の平日にずらす」を選べます（給料日などに）。祝日は振替休日も含めて自動で判定します。</li>
+          <li><b>日付は決めない</b>：毎月あるけれど日付がまちまちなものに。明細では「日付なし」として一番下に出ます。</li>
+          <li><b>開始月・終了月</b>：その期間だけ計上されます。終了月が空欄なら無期限です。</li>
+        </ul>
+        <p><b>登録済み一覧</b>から、あとで変更・削除できます。</p>
+        <ul>
+          <li><b>編集</b>：内容を直せます。<b>解約したときは、ここで終了月を入れてください</b>（それまでの月の記録は残ります）。</li>
+          <li><b>✕</b>：完全に削除します。過去の月の分も消えます。</li>
+          <li>家賃の値上げなどで金額が変わるときは、元の項目に終了月を入れて、新しい金額で別に登録すると、過去の月の金額が変わりません。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>📝 その月だけ金額や日付を変える</summary>
+        <ol>
+          <li>右側の明細で、「固定」マークの付いた行の「変更」を押します。</li>
+          <li>その月だけの金額・日付を入れて「保存」を押します。「この月は計上しない」にもできます。</li>
+        </ol>
+        <ul>
+          <li>ほかの月には影響しません。変更した月には「この月だけ変更」「この月はなし」と表示されます。</li>
+          <li>「元に戻す」で、いつもの金額・日付に戻せます。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>📅 月を切り替える</summary>
+        <ul>
+          <li>「◀ 前月」「次月 ▶」で1か月ずつ移動します。</li>
+          <li>真ん中の「2026年 10月 ▾」を押すと年月を選ぶ画面が開き、好きな月へ移動できます。記録のある月には件数が出ます。</li>
+          <li>今月以外を見ているときは「今月」ボタンで今月に戻れます。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>🎨 色を変える</summary>
+        <ul>
+          <li>右上の「🎨 色を変える」で、ボタン・支出／収入の金額・文字・背景・入力欄などの色を自由に変えられます。</li>
+          <li>「ピンク」「ブルー」「ダーク」で一度に切り替えることもできます。「最初の色に戻す」で元に戻ります。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>💾 データの保存・バックアップ・引っ越し</summary>
+        <ul>
+          <li>記録は<b>このブラウザの中に自動で保存</b>されます。サーバーには送られないので、ほかの人に見られることはありません。</li>
+          <li>そのため、<b>別のパソコン・スマホ・ブラウザとはデータが共有されません。</b></li>
+          <li><b>自動保存ファイル（おすすめ）</b>：右上の「💾 データ」→「保存先ファイルを選ぶ」で保存先を1回選ぶと、記録するたびにそのファイルへ自動で保存します。OneDrive や Google ドライブのフォルダを選ぶと、パソコンが壊れても残ります。</li>
+          <li>ブラウザを開き直したときは、安全のため上に「自動保存が止まっています」と出ます。「再開する」を押して保存を許可してください。</li>
+          <li><b>手動の書き出し</b>：「書き出す」で、全部のデータを1つのファイルに保存できます。</li>
+          <li>「読み込む」でファイルから戻せます（自動保存ファイルも読み込めます）。「置き換える」（今のデータと入れ替え）か「追加する」（今のデータに足す・重複はしない）を選べます。</li>
+          <li>最後のバックアップから30日たつと、上に<b>お知らせ</b>が出ます。自動保存を使っている間は出ません。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>⚠️ 気をつけること</summary>
+        <ul>
+          <li>ブラウザの設定で<b>「Cookie とサイトデータ」を削除すると、記録も消えます。</b>シークレット（プライベート）ウィンドウでは、閉じると記録が消えます。</li>
+          <li>祝日は今の祝日法をもとに計算しています。将来、法律が変わって祝日が動いた場合は反映されません。</li>
+          <li>レシートの読み取り結果は、必ず確認してから追加してください。</li>
+        </ul>
+      </details>
+    </div>
+  </dialog>
+
+  <dialog id="importDialog" aria-labelledby="importTitle">
+    <h3 id="importTitle">データを読み込む</h3>
+    <p id="importSummary"></p>
+    <div class="import-choices">
+      <button class="primary" id="importReplace">置き換える<small>今のデータを消して、ファイルの内容にする</small></button>
+      <button id="importMerge">追加する<small>今のデータを残して、ファイルの記録を足す（同じ記録は重複させない）</small></button>
+    </div>
+    <div class="ov-actions"><span></span><button id="importCancel">キャンセル</button></div>
+  </dialog>
+
+  <section class="card" id="themePanel" hidden>
+    <h2>色の設定</h2>
+    <div class="presets" id="presets"></div>
+    <div class="theme-grid" id="themeGrid"></div>
+    <div class="theme-actions"><button id="themeReset">最初の色に戻す</button></div>
+  </section>
+  <div class="card notice" id="autoSaveNotice" hidden>
+    <span id="autoSaveNoticeText"></span>
+    <span class="notice-actions"><button class="primary" id="autoSaveNoticeResume">再開する</button></span>
+  </div>
+  <div class="card notice" id="backupNotice" hidden>
+    <span id="backupNoticeText"></span>
+    <span class="notice-actions">
+      <button class="primary" id="backupNow">今すぐ書き出す</button>
+      <button id="backupAutoSetup">自動保存を設定</button>
+      <button id="backupLater">あとで</button>
+    </span>
+  </div>
+  <p class="card" id="storageWarn" hidden style="border-color: var(--danger); color: var(--danger);">
+    ⚠ この画面ではデータを保存できません。閉じたり再読み込みしたりすると消えます。
+    エクスプローラーで index.html をダブルクリックし、Edge や Chrome で開いて使ってください。
+  </p>
+
+  <div class="backdrop" id="backdrop"></div>
+  <div class="layout">
+  <aside class="col-input" id="inputMenu">
+  <div class="menu-head">
+    <strong>入力メニュー</strong>
+    <button id="menuClose" title="メニューを閉じる">✕ 閉じる</button>
+  </div>
+  <section class="card">
+    <h2>記録を追加</h2>
+    <div id="dropZone" class="drop-zone" tabindex="0">
+      <input type="file" id="receiptFile" accept="image/*" hidden>
+      <div id="dropIdle">📷 レシートの画像をここにドラッグ＆ドロップ<br><small>（クリックして選択・Ctrl+V で貼り付けも可）</small></div>
+      <div id="dropBusy" hidden>
+        <img id="receiptPreview" alt="">
+        <div><span id="ocrStatus">読み取り中…</span>
+          <div class="track"><div class="fill" id="ocrProgress" style="width:0%"></div></div></div>
+      </div>
+    </div>
+    <div id="ocrResult" hidden>
+      <p class="ocr-msg" id="ocrMsg"></p>
+      <details><summary>読み取った文字を見る</summary><pre id="ocrText"></pre></details>
+    </div>
+    <form id="form">
+      <div class="type-toggle">
+        <label><input type="radio" name="type" value="expense" checked>支出</label>
+        <label><input type="radio" name="type" value="income">収入</label>
+      </div>
+      <label>日付<input type="date" id="date" required></label>
+      <label>金額（円）<input type="number" id="amount" min="1" step="1" required placeholder="1200"></label>
+      <label>カテゴリ
+        <select id="category"></select>
+      </label>
+      <label>メモ<input type="text" id="memo" placeholder="ランチ など"></label>
+      <button class="primary wide" type="submit">追加する</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>毎月の固定収支（給料・家賃など）</h2>
+    <form id="fixedForm">
+      <div class="type-toggle">
+        <label><input type="radio" name="fType" value="expense" checked>支出</label>
+        <label><input type="radio" name="fType" value="income">収入</label>
+      </div>
+      <label>名前<input type="text" id="fName" required placeholder="家賃"></label>
+      <label>金額（円）<input type="number" id="fAmount" min="1" step="1" required placeholder="70000"></label>
+      <label>カテゴリ
+        <select id="fCategory"></select>
+      </label>
+      <div class="day-field">
+        <label>毎月の日付<input type="number" id="fDay" min="1" max="31" value="27" required></label>
+        <label class="check"><input type="checkbox" id="fNoDay">日付は決めない</label>
+      </div>
+      <label class="wide" id="fShiftLabel">土日・祝日に当たったら
+        <select id="fShift">
+          <option value="none">そのままの日付</option>
+          <option value="before">直前の平日にずらす</option>
+          <option value="after">直後の平日にずらす</option>
+        </select>
+      </label>
+      <label>開始月<input type="month" id="fStart" required></label>
+      <label>終了月（空欄なら無期限）<input type="month" id="fEnd"></label>
+      <button class="primary wide" type="submit" id="fSubmit">登録する</button>
+      <button class="wide" type="button" id="fCancel" hidden>編集をやめる</button>
+    </form>
+    <h2 style="margin-top:20px">登録済み一覧</h2>
+    <table><tbody id="fixedList"></tbody></table>
+    <p class="hint">
+      開始月から終了月まで、毎月自動で計上されます。<br>
+      解約したときは「編集」で終了月を入れてください（それまでの月には残ります）。<br>
+      家賃の値上げなど途中で金額が変わるときは、元の項目に終了月を入れて、新しい金額で別に登録すると過去の月の金額が変わりません。
+    </p>
+  </section>
+  </aside>
+
+  <div class="col-month">
+  <section class="card">
+    <div class="month-bar">
+      <button id="prev">◀ 前月</button>
+      <div class="month-jump">
+        <button id="monthLabel" title="年月を選んで移動" aria-haspopup="dialog" aria-expanded="false">▾</button>
+        <div id="monthPicker" class="month-picker" role="dialog" aria-label="表示する年月を選ぶ" hidden>
+          <div class="mp-year">
+            <button id="mpPrevYear" aria-label="前の年">◀</button>
+            <strong id="mpYear"></strong>
+            <button id="mpNextYear" aria-label="次の年">▶</button>
+          </div>
+          <div class="mp-months" id="mpMonths"></div>
+        </div>
+        <button id="thisMonth" title="今月に戻る">今月</button>
+      </div>
+      <button id="next">次月 ▶</button>
+    </div>
+    <div class="summary">
+      <div>収入<strong class="income" id="sumIncome"></strong></div>
+      <div>支出<strong class="expense-amt" id="sumExpense"></strong></div>
+      <div class="balance">収支<strong id="balance"></strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>支出のカテゴリ別</h2>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section class="card list-card">
+    <h2>明細</h2>
+    <div class="list-scroll"><table><tbody id="list"></tbody></table></div>
+  </section>
+  </div>
+  </div>
+
+  <dialog id="ovDialog" aria-labelledby="ovTitle">
+    <form id="ovForm" method="dialog">
+      <h3 id="ovTitle" class="wide"></h3>
+      <p class="hint wide" id="ovNormal"></p>
+      <label>金額（円）<input type="number" id="ovAmount" min="1" step="1" required></label>
+      <div class="day-field">
+        <label>日付<input type="date" id="ovDate" required></label>
+        <label class="check"><input type="checkbox" id="ovNoDay">日付なし</label>
+      </div>
+      <label class="check wide"><input type="checkbox" id="ovSkip">この月は計上しない</label>
+      <div class="ov-actions wide">
+        <button type="button" id="ovReset">元に戻す</button>
+        <span></span>
+        <button type="button" id="ovCancel">キャンセル</button>
+        <button type="submit" class="primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+</main>
+
+<script>
+  const CATEGORIES = {
+    expense: ["食費", "日用品", "交通費", "趣味", "交際費", "住居・光熱", "その他"],
+    income: ["給与", "賞与", "副業", "その他収入"],
+  };
+  // 収入機能を追加する前のデータには type が無いので支出として扱う
+  const typeOf = e => e.type || "expense";
+  const checkedType = name => document.querySelector(`input[name=${name}]:checked`).value;
+  const KEY = "kakeibo-entries";
+  const FIXED_KEY = "kakeibo-fixed";
+  const yen = n => n.toLocaleString("ja-JP") + " 円";
+  const toYm = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  let entries = load(KEY);
+  // 固定収支: { id, type, name, category, amount, day, shift, start: "YYYY-MM", end: "YYYY-MM" | null }
+  let fixed = load(FIXED_KEY);
+  let current = new Date(); current.setDate(1);
+  let editingId = null; // 編集中の固定収支の id（新規登録のときは null）
+  // 自動保存ファイルの状態: off / active / needs-permission / error / unsupported
+  let autoState = "off", autoHandle = null, autoTimer = null, lastAutoSave = null, autoError = "";
+
+  function load(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(entries));
+      localStorage.setItem(FIXED_KEY, JSON.stringify(fixed));
+    } catch {}
+    scheduleAutoSave();
+    updateBackupNotice();
+  }
+  // localStorage の小さな値の読み書き（使えない環境でもエラーにしない）
+  const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  const $ = id => document.getElementById(id);
+  try { localStorage.setItem("kakeibo-test", "1"); localStorage.removeItem("kakeibo-test"); }
+  catch { $("storageWarn").hidden = false; }
+  // 支出/収入の切り替えに合わせてカテゴリの選択肢を入れ替える
+  function setCategories(selectId, type, preferred) {
+    $(selectId).innerHTML = CATEGORIES[type].map(c => `<option>${c}</option>`).join("");
+    if (preferred && CATEGORIES[type].includes(preferred)) $(selectId).value = preferred;
+  }
+  function syncForm() {
+    const t = checkedType("type");
+    setCategories("category", t);
+    $("memo").placeholder = t === "income" ? "臨時収入 など" : "ランチ など";
+  }
+  function syncFixedForm() {
+    const t = checkedType("fType");
+    setCategories("fCategory", t, t === "income" ? "給与" : "住居・光熱");
+    $("fName").placeholder = t === "income" ? "給料" : "家賃";
+    $("fAmount").placeholder = t === "income" ? "250000" : "70000";
+    if (editingId) return; // 編集中は入力済みの日付などを上書きしない
+    $("fDay").value = t === "income" ? 25 : 27;
+    $("fShift").value = t === "income" ? "before" : "none";
+  }
+  document.querySelectorAll("input[name=type]").forEach(r => r.addEventListener("change", syncForm));
+  document.querySelectorAll("input[name=fType]").forEach(r => r.addEventListener("change", syncFixedForm));
+  syncForm(); syncFixedForm();
+
+  // 「日付は決めない」のときは、日付と土日祝の設定を使わない
+  function syncNoDay() {
+    const noDay = $("fNoDay").checked;
+    $("fDay").disabled = noDay;
+    $("fShift").disabled = noDay;
+  }
+  $("fNoDay").addEventListener("change", syncNoDay);
+
+  // 固定収支フォームを新規登録の状態に戻す
+  function resetFixedForm() {
+    editingId = null;
+    $("fNoDay").checked = false; syncNoDay();
+    $("fName").value = ""; $("fAmount").value = "";
+    $("fStart").value = toYm(current); // 新規は表示中の月から
+    $("fEnd").value = "";
+    $("fSubmit").textContent = "登録する";
+    $("fCancel").hidden = true;
+  }
+
+  // 一覧の「編集」で、その項目の内容をフォームに読み込む
+  function startEdit(f) {
+    editingId = f.id;
+    document.querySelector(`input[name=fType][value=${typeOf(f)}]`).checked = true;
+    setCategories("fCategory", typeOf(f), f.category);
+    $("fName").value = f.name;
+    $("fAmount").value = f.amount;
+    $("fNoDay").checked = f.day == null;
+    if (f.day != null) $("fDay").value = f.day;
+    $("fShift").value = f.shift || "none";
+    syncNoDay();
+    $("fStart").value = f.start;
+    $("fEnd").value = f.end || "";
+    $("fSubmit").textContent = "更新する";
+    $("fCancel").hidden = false;
+    $("fixedForm").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("fName").focus();
+    render();
+  }
+
+  $("fixedForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const data = {
+      type: checkedType("fType"),
+      name: $("fName").value.trim(),
+      amount: Number($("fAmount").value),
+      category: $("fCategory").value,
+      day: $("fNoDay").checked ? null : Number($("fDay").value), // null = 日付は決めない
+      shift: $("fNoDay").checked ? "none" : $("fShift").value,
+      start: $("fStart").value,
+      end: $("fEnd").value || null,
+    };
+    if (data.end && data.end < data.start) {
+      alert("終了月は開始月と同じか、それより後にしてください。");
+      return;
+    }
+    if (editingId) {
+      Object.assign(fixed.find(x => x.id === editingId), data);
+    } else {
+      fixed.push({ id: Date.now(), ...data });
+    }
+    save();
+    resetFixedForm();
+    render();
+  });
+
+  $("fCancel").addEventListener("click", () => { resetFixedForm(); render(); });
+
+  $("fixedList").addEventListener("click", e => {
+    const id = Number(e.target.dataset.id);
+    if (!id) return;
+    const f = fixed.find(x => x.id === id);
+    if (e.target.dataset.action === "edit") return startEdit(f);
+    if (!confirm(`「${f.name}」を削除しますか？\n過去の月の分も含めて、すべての月から消えます。\n（解約しただけなら「編集」で終了月を入れるのがおすすめです）`)) return;
+    fixed = fixed.filter(x => x.id !== id);
+    if (editingId === id) resetFixedForm();
+    save(); render();
+  });
+
+  // ---- 日本の祝日（現行の祝日法に基づいて計算。1980〜2099年に対応） ----
+  const holidayCache = {};
+  function holidaysOf(y) {
+    if (holidayCache[y]) return holidayCache[y];
+    const key = (m, d) => `${m}-${d}`;
+    // m月の第n月曜日
+    const nthMonday = (m, n) => {
+      const first = new Date(y, m - 1, 1).getDay();
+      return 1 + ((8 - first) % 7) + (n - 1) * 7;
+    };
+    const spring = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+    const autumn = Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+    const h = new Map([
+      [key(1, 1), "元日"],
+      [key(1, nthMonday(1, 2)), "成人の日"],
+      [key(2, 11), "建国記念の日"],
+      [key(2, 23), "天皇誕生日"],
+      [key(3, spring), "春分の日"],
+      [key(4, 29), "昭和の日"],
+      [key(5, 3), "憲法記念日"],
+      [key(5, 4), "みどりの日"],
+      [key(5, 5), "こどもの日"],
+      [key(7, nthMonday(7, 3)), "海の日"],
+      [key(8, 11), "山の日"],
+      [key(9, nthMonday(9, 3)), "敬老の日"],
+      [key(9, autumn), "秋分の日"],
+      [key(10, nthMonday(10, 2)), "スポーツの日"],
+      [key(11, 3), "文化の日"],
+      [key(11, 23), "勤労感謝の日"],
+    ]);
+    // 国民の休日: 祝日と祝日にはさまれた平日（例: 敬老の日と秋分の日の間）
+    for (let m = 1; m <= 12; m++) {
+      const last = new Date(y, m, 0).getDate();
+      for (let d = 2; d < last; d++) {
+        if (!h.has(key(m, d)) && new Date(y, m - 1, d).getDay() !== 0
+            && h.has(key(m, d - 1)) && h.has(key(m, d + 1))) h.set(key(m, d), "国民の休日");
+      }
+    }
+    // 振替休日: 祝日が日曜なら、その後の最初の「祝日でない日」が休み
+    for (const [k] of [...h]) {
+      const [m, d] = k.split("-").map(Number);
+      if (new Date(y, m - 1, d).getDay() !== 0) continue;
+      const next = new Date(y, m - 1, d + 1);
+      while (h.has(key(next.getMonth() + 1, next.getDate()))) next.setDate(next.getDate() + 1);
+      h.set(key(next.getMonth() + 1, next.getDate()), "振替休日");
+    }
+    return (holidayCache[y] = h);
+  }
+  const holidayName = (y, m, d) => holidaysOf(y).get(`${m}-${d}`);
+
+  // 土日祝なら営業日までずらした日を返す。月をまたぐ場合は逆方向にずらして同じ月に収める
+  function shiftHoliday(y, m, day, shift) {
+    const lastDay = new Date(y, m, 0).getDate();
+    const isOff = d => [0, 6].includes(new Date(y, m - 1, d).getDay()) || !!holidayName(y, m, d);
+    if (!shift || shift === "none" || !isOff(day)) return day;
+    const step = shift === "before" ? -1 : 1;
+    let d = day;
+    while (d >= 1 && d <= lastDay && isOff(d)) d += step;
+    if (d < 1 || d > lastDay) {
+      d = day;
+      while (isOff(d)) d -= step;
+    }
+    return d;
+  }
+
+  // 指定月に計上される固定費を、明細と同じ形にして返す
+  function fixedEntriesFor(ym) {
+    const [y, m] = ym.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return fixed
+      .filter(f => f.start <= ym && (!f.end || ym <= f.end))
+      .map(f => ({
+        ...applyOverride(f, ym, y, m, lastDay),
+        id: null, fixed: true, fixedId: f.id, ym, type: typeOf(f), category: f.category, memo: f.name,
+      }));
+  }
+
+  // 固定収支のその月の金額・日付を返す。「その月だけ変更」（f.overrides[ym]）があればそちらを使う
+  //   overrides[ym] = { amount?: 数値, day?: 数値 | null（日付なし）, skip?: true（その月は計上しない） }
+  function applyOverride(f, ym, y, m, lastDay) {
+    const ov = (f.overrides || {})[ym];
+    // 日付を決めないものは「00日」として扱い、明細では一番下に並ぶ
+    const dateOf = day => `${ym}-${String(day).padStart(2, "0")}`;
+    let day = f.day == null ? null : shiftHoliday(y, m, Math.min(f.day, lastDay), f.shift);
+    if (ov && "day" in ov) day = ov.day == null ? null : Math.min(ov.day, lastDay); // 指定した日はずらさない
+    return {
+      amount: ov && ov.amount != null ? ov.amount : f.amount,
+      date: day == null ? `${ym}-00` : dateOf(day),
+      noDay: day == null,
+      skipped: !!(ov && ov.skip),
+      overridden: !!ov,
+    };
+  }
+  $("date").valueAsDate = new Date();
+
+  $("form").addEventListener("submit", e => {
+    e.preventDefault();
+    entries.push({
+      id: Date.now(),
+      type: checkedType("type"),
+      date: $("date").value,
+      amount: Number($("amount").value),
+      category: $("category").value,
+      memo: $("memo").value.trim(),
+    });
+    save();
+    current = new Date($("date").value); current.setDate(1); // 追加した月を表示
+    $("amount").value = ""; $("memo").value = "";
+    document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
+    $("ocrResult").hidden = true;
+    $("amount").focus();
+    render();
+  });
+
+  function goToMonth(y, m) {
+    current = new Date(y, m - 1, 1);
+    if (!editingId) $("fStart").value = toYm(current); // 新規登録の開始月は表示中の月に合わせる
+    render();
+  }
+  const moveMonth = diff => goToMonth(current.getFullYear(), current.getMonth() + 1 + diff);
+  $("prev").onclick = () => moveMonth(-1);
+  $("next").onclick = () => moveMonth(1);
+
+  // 年月を押すと年月選択パネルを開き、選んだ月へ移動。記録のある月には件数を表示する
+  let pickerYear = null;
+  function renderPicker() {
+    $("mpYear").textContent = `${pickerYear}年`;
+    const now = toYm(new Date()), sel = toYm(current);
+    $("mpMonths").innerHTML = Array.from({ length: 12 }, (_, i) => {
+      const ym = `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
+      const n = entries.filter(e => e.date.startsWith(ym)).length;
+      const cls = [ym === sel && "selected", ym === now && "today"].filter(Boolean).join(" ");
+      return `<button class="${cls}" data-month="${i + 1}">${i + 1}月${n ? `<small>${n}件</small>` : "<small>&nbsp;</small>"}</button>`;
+    }).join("");
+  }
+  function setPicker(open) {
+    $("monthPicker").hidden = !open;
+    $("monthLabel").setAttribute("aria-expanded", open);
+    if (open) { pickerYear = current.getFullYear(); renderPicker(); $("mpMonths").querySelector(".selected").focus(); }
+  }
+  $("monthLabel").addEventListener("click", () => setPicker($("monthPicker").hidden));
+  $("mpPrevYear").addEventListener("click", () => { pickerYear--; renderPicker(); });
+  $("mpNextYear").addEventListener("click", () => { pickerYear++; renderPicker(); });
+  $("mpMonths").addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    goToMonth(pickerYear, Number(b.dataset.month));
+    setPicker(false);
+    $("monthLabel").focus();
+  });
+  // パネルの外を押す・Esc で閉じる
+  document.addEventListener("click", e => {
+    if (!$("monthPicker").hidden && !e.target.closest(".month-jump")) setPicker(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("monthPicker").hidden) { setPicker(false); $("monthLabel").focus(); }
+  });
+  $("thisMonth").addEventListener("click", () => { const d = new Date(); goToMonth(d.getFullYear(), d.getMonth() + 1); });
+
+  function render() {
+    const ym = toYm(current);
+    $("monthLabel").textContent = `${current.getFullYear()}年 ${current.getMonth() + 1}月 ▾`;
+    $("thisMonth").hidden = ym === toYm(new Date());
+
+    // 固定収支の一覧（登録済みのものすべて）。収入→支出、その中は金額の大きい順
+    const thisMonth = toYm(new Date());
+    const ymLabel = s => `${s.slice(0, 4)}年${Number(s.slice(5))}月`;
+    const sortedFixed = [...fixed].sort((a, b) =>
+      (typeOf(a) === "income" ? 0 : 1) - (typeOf(b) === "income" ? 0 : 1) || b.amount - a.amount);
+    $("fixedList").innerHTML = sortedFixed.length === 0
+      ? `<tr><td class="empty">登録されていません</td></tr>`
+      : sortedFixed.map(f => {
+          const ended = f.end && f.end < thisMonth;
+          const status = ended ? "終了" : f.start > thisMonth ? "開始前" : "";
+          return `
+          <tr class="${f.id === editingId ? "editing" : ""} ${ended ? "ended" : ""}">
+            <td>${escapeHtml(f.name)}${status ? `<span class="status">${status}</span>` : ""}
+              <div class="memo">${f.category}・${f.day == null ? "毎月（日付なし）" : `毎月${f.day}日`}${{ before: "（土日祝は前の平日）", after: "（土日祝は次の平日）" }[f.shift] || ""}</div>
+              <div class="memo">${ymLabel(f.start)}〜${f.end ? ymLabel(f.end) : ""}</div></td>
+            <td class="num">${signedYen(f)}</td>
+            <td style="white-space:nowrap">
+              <button class="edit" data-id="${f.id}" data-action="edit">編集</button>
+              <button class="del" data-id="${f.id}" title="削除">✕</button>
+            </td>
+          </tr>`;
+        }).join("");
+
+    const month = entries.filter(e => e.date.startsWith(ym))
+      .concat(fixedEntriesFor(ym))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const counted = month.filter(e => !e.skipped); // 「この月はなし」にしたものは合計に入れない
+    const sumOf = type => counted.filter(e => typeOf(e) === type).reduce((s, e) => s + e.amount, 0);
+    const income = sumOf("income"), expense = sumOf("expense"), balance = income - expense;
+    $("sumIncome").textContent = yen(income);
+    $("sumExpense").textContent = yen(expense);
+    $("balance").textContent = (balance > 0 ? "+" : "") + yen(balance);
+    $("balance").className = balance >= 0 ? "income" : "expense-amt";
+
+    // 支出のカテゴリ別の棒グラフ
+    const sums = {};
+    counted.filter(e => typeOf(e) === "expense")
+      .forEach(e => sums[e.category] = (sums[e.category] || 0) + e.amount);
+    const max = Math.max(1, ...Object.values(sums));
+    $("bars").innerHTML = Object.keys(sums).length === 0
+      ? `<div class="empty">まだ支出がありません</div>`
+      : Object.entries(sums).sort((a, b) => b[1] - a[1]).map(([cat, sum]) => `
+          <div class="row">
+            <span>${cat}</span>
+            <div class="track"><div class="fill" style="width:${sum / max * 100}%"></div></div>
+            <span class="amt">${yen(sum)}</span>
+          </div>`).join("");
+
+    // 明細
+    $("list").innerHTML = month.length === 0
+      ? `<tr><td class="empty">明細はありません</td></tr>`
+      : month.map(e => `
+          <tr class="${e.skipped ? "skipped" : ""}">
+            <td>${e.noDay ? '<span class="no-day">日付なし</span>' : e.date.slice(5).replace("-", "/")}</td>
+            <td>${e.category}${e.fixed ? '<span class="badge">固定</span>' : ""}${
+              e.skipped ? '<span class="status">この月はなし</span>' : e.overridden ? '<span class="status">この月だけ変更</span>' : ""}
+              <div class="memo">${escapeHtml(e.memo)}</div></td>
+            <td class="num">${signedYen(e)}</td>
+            <td style="white-space:nowrap">${e.fixed
+              ? `<button class="edit" data-fixed-id="${e.fixedId}" data-ym="${e.ym}" title="この月だけ金額や日付を変える">変更</button>`
+              : `<button class="del" data-id="${e.id}" title="削除">✕</button>`}</td>
+          </tr>`).join("");
+  }
+
+  $("list").addEventListener("click", e => {
+    if (e.target.dataset.fixedId) return openOverride(Number(e.target.dataset.fixedId), e.target.dataset.ym);
+    const id = Number(e.target.dataset.id);
+    if (!id || !confirm("この明細を削除しますか？")) return;
+    entries = entries.filter(x => x.id !== id);
+    save(); render();
+  });
+
+  // ---- 固定収支を「その月だけ変更」 ----
+  let ovTarget = null; // { f, ym }
+  function syncOvForm() {
+    const skip = $("ovSkip").checked;
+    $("ovNoDay").disabled = skip;
+    $("ovAmount").disabled = skip;
+    $("ovDate").disabled = skip || $("ovNoDay").checked;
+  }
+  ["ovSkip", "ovNoDay"].forEach(id => $(id).addEventListener("change", syncOvForm));
+
+  function openOverride(fixedId, ym) {
+    const f = fixed.find(x => x.id === fixedId);
+    const [y, m] = ym.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const cur = applyOverride(f, ym, y, m, lastDay);
+    ovTarget = { f, ym };
+    $("ovTitle").textContent = `「${f.name}」の ${y}年${m}月分だけ変更`;
+    $("ovNormal").textContent = `いつもは ${yen(f.amount)}・${f.day == null ? "日付なし" : `毎月${f.day}日`}。ほかの月には影響しません。`;
+    $("ovAmount").value = cur.amount;
+    $("ovDate").min = `${ym}-01`;
+    $("ovDate").max = `${ym}-${String(lastDay).padStart(2, "0")}`;
+    $("ovDate").value = cur.noDay ? `${ym}-01` : cur.date;
+    $("ovNoDay").checked = cur.noDay;
+    $("ovSkip").checked = cur.skipped;
+    $("ovReset").hidden = !cur.overridden;
+    syncOvForm();
+    $("ovDialog").showModal();
+  }
+
+  $("ovForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const { f, ym } = ovTarget;
+    const [y, m] = ym.split("-").map(Number);
+    const base = applyOverride({ ...f, overrides: {} }, ym, y, m, new Date(y, m, 0).getDate()); // 変更しない場合の値
+    const ov = {};
+    if ($("ovSkip").checked) {
+      ov.skip = true;
+    } else {
+      const amount = Number($("ovAmount").value);
+      const day = $("ovNoDay").checked ? null : Number($("ovDate").value.slice(8));
+      if (amount !== base.amount) ov.amount = amount;
+      if ((day == null) !== base.noDay || (day != null && day !== Number(base.date.slice(8)))) ov.day = day;
+    }
+    f.overrides = f.overrides || {};
+    if (Object.keys(ov).length) f.overrides[ym] = ov; else delete f.overrides[ym]; // いつもと同じなら変更なし扱い
+    save(); render();
+    $("ovDialog").close();
+  });
+  $("ovReset").addEventListener("click", () => {
+    delete ovTarget.f.overrides[ovTarget.ym];
+    save(); render();
+    $("ovDialog").close();
+  });
+  $("ovCancel").addEventListener("click", () => $("ovDialog").close());
+
+  // 収入は「+」、支出は「-」を付けて、それぞれの色で表示
+  function signedYen(e) {
+    return typeOf(e) === "income"
+      ? `<span class="income">+${yen(e.amount)}</span>`
+      : `<span class="expense-amt">-${yen(e.amount)}</span>`;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---- レシート読み取り（Tesseract.js で端末内で文字認識） ----
+  let ocrWorkerPromise = null;
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = () => reject(new Error("ライブラリを読み込めませんでした（ネット接続を確認してください）"));
+      document.head.appendChild(s);
+    });
+  }
+  // 初回だけライブラリと日本語の認識データを読み込む。2回目以降は使い回す
+  function getOcrWorker() {
+    if (!ocrWorkerPromise) {
+      ocrWorkerPromise = (async () => {
+        if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
+        return Tesseract.createWorker("jpn", 1, {
+          logger: m => {
+            const label = { "loading tesseract core": "準備中", "loading language traineddata": "日本語データを読み込み中（初回のみ）",
+              "initializing api": "準備中", "recognizing text": "読み取り中" }[m.status];
+            if (label) $("ocrStatus").textContent = label + "…";
+            if (typeof m.progress === "number") $("ocrProgress").style.width = Math.round(m.progress * 100) + "%";
+          },
+        });
+      })().catch(err => { ocrWorkerPromise = null; throw err; });
+    }
+    return ocrWorkerPromise;
+  }
+
+  // 認識しやすいように、白黒にしてコントラストを上げ、小さい画像は拡大する
+  async function preprocess(file) {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(3, Math.max(1, 1600 / img.width));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const px = ctx.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < px.data.length; i += 4) {
+      const g = 0.299 * px.data[i] + 0.587 * px.data[i + 1] + 0.114 * px.data[i + 2];
+      const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
+      px.data[i] = px.data[i + 1] = px.data[i + 2] = v;
+    }
+    ctx.putImageData(px, 0, 0);
+    return c;
+  }
+
+  // 全角英数字→半角、文字の間に入りがちな空白を除く
+  function normalizeLine(s) {
+    return s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/[，､]/g, ",").replace(/[．。]/g, ".").replace(/[／]/g, "/")
+      .replace(/[\s　]+/g, "");
+  }
+  const toNum = s => Number(s.replace(/[,.](?=\d{3}(\D|$))/g, "").replace(/[^\d]/g, ""));
+
+  function parseReceipt(text) {
+    const lines = text.split("\n").map(normalizeLine).filter(Boolean);
+    const result = {};
+
+    // 金額: 「合計」などの行の金額を優先。無ければ「¥」付きの最大の金額
+    const amountIn = l => {
+      const nums = [...l.matchAll(/[¥￥\\]?(\d{1,3}(?:[,.]\d{3})+|\d+)/g)].map(m => toNum(m[1]));
+      return nums.length ? nums[nums.length - 1] : null; // 行の右端の数字
+    };
+    const priorities = [/(総合計|お買上げ?合計|お買い?上げ?計|合計|お支払い?金?額|ご請求額|領収金額)/, /(現計|お預り|お預かり)/];
+    for (const re of priorities) {
+      const line = lines.find(l => re.test(l) && !/小計|点数|対象|内税|消費税|税率/.test(l) && amountIn(l));
+      if (line) { result.amount = amountIn(line); break; }
+    }
+    if (!result.amount) {
+      const yenNums = lines.flatMap(l => [...l.matchAll(/[¥￥\\](\d{1,3}(?:[,.]\d{3})+|\d+)/g)].map(m => toNum(m[1])));
+      if (yenNums.length) { result.amount = Math.max(...yenNums.filter(n => n < 10000000)); result.amountGuessed = true; }
+    }
+
+    // 日付: 2026年10月3日 / 2026/10/03 / 2026-10-03 / 2026.10.03 / 令和8年10月3日 / R8.10.3 / 26/10/03
+    const all = lines.join("\n");
+    let m;
+    if ((m = all.match(/(20\d{2})[年\/.\-](\d{1,2})[月\/.\-](\d{1,2})/))) {
+      result.date = [m[1], m[2], m[3]];
+    } else if ((m = all.match(/(?:令和|R)(\d{1,2}|元)[年\/.\-](\d{1,2})[月\/.\-](\d{1,2})/))) {
+      result.date = [String(2018 + (m[1] === "元" ? 1 : Number(m[1]))), m[2], m[3]];
+    } else if ((m = all.match(/(?<!\d)(\d{2})[\/.](\d{1,2})[\/.](\d{1,2})(?!\d)/))) {
+      result.date = ["20" + m[1], m[2], m[3]];
+    }
+    if (result.date) {
+      const [y, mo, d] = result.date.map(Number);
+      const dt = new Date(y, mo - 1, d);
+      result.date = dt.getMonth() === mo - 1 && mo >= 1 && d >= 1
+        ? `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null;
+    }
+
+    // 店名: 上のほうにある、数字が少なく日本語を含む行
+    result.store = lines.slice(0, 6).find(l =>
+      /[ぁ-んァ-ヶ一-龠]/.test(l) && l.length >= 2 && l.length <= 24
+      && (l.match(/\d/g) || []).length <= 2 && !/領収|レシート|いらっしゃいませ|ありがとう|電話|TEL/i.test(l)) || "";
+
+    // カテゴリの推測
+    const rules = [
+      ["交通費", /駅|JR|鉄道|バス|タクシー|ガソリン|ENEOS|出光|コスモ石油|パーキング|駐車/i],
+      ["日用品", /ドラッグ|薬局|マツモトキヨシ|ウエルシア|スギ薬局|ツルハ|ダイソー|セリア|ホームセンター|カインズ|ニトリ|無印/],
+      ["趣味", /書店|ブック|TSUTAYA|ゲーム|映画|シネマ|ヨドバシ|ビックカメラ/],
+      ["食費", /スーパー|マート|ストア|食品|セブン|ファミリーマート|ローソン|イオン|西友|ライフ|まいばすけっと|ベーカリー|パン|弁当|食堂|カフェ|珈琲|コーヒー|マクドナルド|すき家|吉野家/],
+    ];
+    result.category = (rules.find(([, re]) => re.test(all)) || [])[0];
+    return result;
+  }
+
+  async function readReceipt(file) {
+    if (!file || !file.type.startsWith("image/")) { alert("画像ファイル（JPEG・PNG など）を選んでください。"); return; }
+    if (!menuIsOpen()) setMenu(true); // メニューを閉じていても、読み取り結果のフォームが見えるように開く
+    $("dropIdle").hidden = true; $("dropBusy").hidden = false; $("ocrResult").hidden = true;
+    $("receiptPreview").src = URL.createObjectURL(file);
+    $("ocrStatus").textContent = "準備中…"; $("ocrProgress").style.width = "0%";
+    try {
+      const [worker, canvas] = await Promise.all([getOcrWorker(), preprocess(file)]);
+      const { data } = await worker.recognize(canvas);
+      const r = parseReceipt(data.text);
+
+      // フォームに入れる（支出として）
+      document.querySelector("input[name=type][value=expense]").checked = true;
+      syncForm();
+      document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
+      const fill = (id, v) => { if (v) { $(id).value = v; $(id).classList.add("filled"); } };
+      fill("date", r.date); fill("amount", r.amount); fill("memo", r.store); fill("category", r.category);
+
+      const missing = [!r.amount && "金額", !r.date && "日付"].filter(Boolean);
+      $("ocrMsg").className = "ocr-msg" + (missing.length || r.amountGuessed ? " warn" : "");
+      $("ocrMsg").textContent = missing.length
+        ? `${missing.join("と")}を読み取れませんでした。手で入力してから「追加する」を押してください。`
+        : r.amountGuessed
+        ? "「合計」の行が見つからなかったので、いちばん大きい金額を入れました。金額を確認してから「追加する」を押してください。"
+        : "読み取った内容をフォームに入れました（緑の枠）。間違いがないか確認して「追加する」を押してください。";
+      $("ocrText").textContent = data.text.trim() || "（文字が見つかりませんでした）";
+      $("ocrResult").hidden = false;
+      $("amount").focus();
+    } catch (err) {
+      $("ocrMsg").className = "ocr-msg warn";
+      $("ocrMsg").textContent = "読み取りに失敗しました：" + err.message;
+      $("ocrText").textContent = "";
+      $("ocrResult").hidden = false;
+    } finally {
+      $("dropIdle").hidden = false; $("dropBusy").hidden = true;
+    }
+  }
+
+  // ドラッグ＆ドロップ（ページのどこに落としても受け付ける）・クリック選択・貼り付け
+  const dz = $("dropZone");
+  dz.addEventListener("click", () => $("receiptFile").click());
+  dz.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") $("receiptFile").click(); });
+  $("receiptFile").addEventListener("change", e => { readReceipt(e.target.files[0]); e.target.value = ""; });
+  window.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
+  window.addEventListener("dragleave", e => { if (!e.relatedTarget) dz.classList.remove("over"); });
+  window.addEventListener("drop", e => {
+    e.preventDefault(); dz.classList.remove("over");
+    readReceipt(e.dataTransfer.files[0]);
+  });
+  window.addEventListener("paste", e => {
+    const item = [...e.clipboardData.items].find(i => i.type.startsWith("image/"));
+    if (item) readReceipt(item.getAsFile());
+  });
+
+  // ---- 色の設定 ----
+  const THEME_KEY = "kakeibo-theme";
+  const THEME_VARS = [
+    ["--accent", "ボタン・強調"],
+    ["--on-accent", "ボタンの文字"],
+    ["--expense", "支出の金額"],
+    ["--income", "収入の金額"],
+    ["--text", "文字"],
+    ["--muted", "補足の文字"],
+    ["--bg", "背景"],
+    ["--card", "カードの背景"],
+    ["--field", "入力欄の背景"],
+  ];
+  const PRESETS = {
+    "ピンク": { "--accent": "#d6457f", "--on-accent": "#ffffff", "--expense": "#d0312d", "--income": "#2563b8",
+      "--text": "#3a2430", "--muted": "#8a6d7a", "--bg": "#fdf4f7", "--card": "#ffffff", "--field": "#fff8fb", "--line": "#f0dce4" },
+    "ブルー": { "--accent": "#2f6fd6", "--on-accent": "#ffffff", "--expense": "#d0312d", "--income": "#0e8a6a",
+      "--text": "#1d2939", "--muted": "#667085", "--bg": "#f2f6fb", "--card": "#ffffff", "--field": "#f7faff", "--line": "#dde5ef" },
+    "ダーク": { "--accent": "#7aa2f7", "--on-accent": "#0b1020", "--expense": "#f07067", "--income": "#6fa8f0",
+      "--text": "#e8e8e8", "--muted": "#9aa0a6", "--bg": "#121417", "--card": "#1d2024", "--field": "#272b31", "--line": "#33373d" },
+  };
+
+  // どんな書き方の色でも <input type=color> が受け付ける #rrggbb にそろえる
+  const colorCtx = document.createElement("canvas").getContext("2d");
+  function toHex(color) { colorCtx.fillStyle = "#000"; colorCtx.fillStyle = color; return colorCtx.fillStyle; }
+
+  let theme = (() => { try { return JSON.parse(localStorage.getItem(THEME_KEY)) || {}; } catch { return {}; } })();
+  function applyTheme() {
+    const root = document.documentElement;
+    ["--line", ...THEME_VARS.map(([v]) => v)].forEach(v => root.style.removeProperty(v));
+    Object.entries(theme).forEach(([v, c]) => root.style.setProperty(v, c));
+    try { localStorage.setItem(THEME_KEY, JSON.stringify(theme)); } catch {}
+    scheduleAutoSave();
+    syncPickers();
+  }
+  // 色見本を今の色に合わせる
+  function syncPickers() {
+    const cs = getComputedStyle(document.documentElement);
+    THEME_VARS.forEach(([v]) => { const el = $("theme" + v); if (el) el.value = toHex(cs.getPropertyValue(v).trim()); });
+  }
+  // パソコンのライト/ダークが切り替わったら、色見本も合わせる
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncPickers);
+
+  $("themeGrid").innerHTML = THEME_VARS.map(([v, label]) =>
+    `<label>${label}<input type="color" id="theme${v}" data-var="${v}"></label>`).join("");
+  $("themeGrid").addEventListener("input", e => {
+    if (!e.target.dataset.var) return;
+    theme[e.target.dataset.var] = e.target.value;
+    applyTheme();
+  });
+
+  $("presets").innerHTML = Object.entries(PRESETS).map(([name, p]) =>
+    `<button data-preset="${name}"><span class="swatch" style="background:${p["--accent"]}"></span>${name}</button>`).join("");
+  $("presets").addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    theme = { ...PRESETS[b.dataset.preset] };
+    applyTheme();
+  });
+
+  $("themeReset").addEventListener("click", () => { theme = {}; applyTheme(); });
+  $("themeToggle").addEventListener("click", () => {
+    const open = $("themePanel").hidden;
+    $("themePanel").hidden = !open;
+    $("themeToggle").setAttribute("aria-expanded", open);
+    if (open) syncPickers();
+  });
+  applyTheme();
+
+  // ---- データの書き出し・読み込み ----
+  const BACKUP_FORMAT = "kakeibo-backup";
+  $("dataToggle").addEventListener("click", () => {
+    const open = $("dataPanel").hidden;
+    $("dataPanel").hidden = !open;
+    $("dataToggle").setAttribute("aria-expanded", open);
+    if (open) showDataInfo();
+  });
+  function showDataInfo() {
+    $("dataInfo").textContent = `今のデータ：記録 ${entries.length}件・固定収支 ${fixed.length}件`;
+  }
+
+  function buildBackup() {
+    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme };
+  }
+  $("exportBtn").addEventListener("click", () => {
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const blob = new Blob([JSON.stringify(buildBackup(), null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `家計簿データ_${stamp}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    markBackedUp();
+    $("dataInfo").textContent = `「${a.download}」を書き出しました（記録 ${entries.length}件・固定収支 ${fixed.length}件）。ダウンロードフォルダを確認してください。`;
+  });
+
+  // 読み込んだファイルが家計簿のデータとして正しい形かを確かめる
+  function validateBackup(obj) {
+    if (!obj || obj.format !== BACKUP_FORMAT) throw new Error("家計簿の書き出しファイルではありません。");
+    if (!Array.isArray(obj.entries) || !Array.isArray(obj.fixed)) throw new Error("ファイルの中身が壊れています。");
+    const okEntry = e => e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && Number.isFinite(e.amount) && e.id != null;
+    const okFixed = f => f && typeof f.name === "string" && Number.isFinite(f.amount) && /^\d{4}-\d{2}$/.test(f.start) && f.id != null;
+    if (!obj.entries.every(okEntry) || !obj.fixed.every(okFixed)) throw new Error("ファイルの中に読み込めない記録があります。");
+    return obj;
+  }
+
+  let pendingImport = null;
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      pendingImport = validateBackup(JSON.parse(await file.text()));
+    } catch (err) {
+      alert("読み込めませんでした：" + (err instanceof SyntaxError ? "ファイルの形式が違います。" : err.message));
+      return;
+    }
+    const when = pendingImport.exportedAt ? new Date(pendingImport.exportedAt).toLocaleString("ja-JP") : "不明";
+    $("importSummary").textContent =
+      `ファイル：${file.name}\n書き出した日時：${when}\n中身：記録 ${pendingImport.entries.length}件・固定収支 ${pendingImport.fixed.length}件\n\n今のデータ：記録 ${entries.length}件・固定収支 ${fixed.length}件`;
+    $("importDialog").showModal();
+  });
+
+  function finishImport(message) {
+    save(); resetFixedForm(); render(); showDataInfo();
+    $("importDialog").close();
+    pendingImport = null;
+    $("dataInfo").textContent = message;
+  }
+  $("importReplace").addEventListener("click", () => {
+    if (!confirm("今のデータはすべて消えて、ファイルの内容に置き換わります。よろしいですか？")) return;
+    entries = pendingImport.entries;
+    fixed = pendingImport.fixed;
+    theme = pendingImport.theme || {};
+    applyTheme();
+    finishImport(`置き換えました（記録 ${entries.length}件・固定収支 ${fixed.length}件）。`);
+  });
+  $("importMerge").addEventListener("click", () => {
+    const entryIds = new Set(entries.map(e => e.id)), fixedIds = new Set(fixed.map(f => f.id));
+    const newEntries = pendingImport.entries.filter(e => !entryIds.has(e.id));
+    const newFixed = pendingImport.fixed.filter(f => !fixedIds.has(f.id));
+    entries = entries.concat(newEntries);
+    fixed = fixed.concat(newFixed);
+    finishImport(`追加しました（記録 ${newEntries.length}件・固定収支 ${newFixed.length}件。すでにあった ${pendingImport.entries.length - newEntries.length + pendingImport.fixed.length - newFixed.length}件は重複なのでとばしました）。`);
+  });
+  $("importCancel").addEventListener("click", () => { $("importDialog").close(); pendingImport = null; });
+
+  // ---- 自動保存ファイル（File System Access API。Edge・Chrome のみ） ----
+  // 選んだファイルの「つかみ」(handle) は IndexedDB に保存して、次に開いたときも使う
+  function idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open("kakeibo", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("kv");
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction("kv", mode);
+        const r = fn(tx.objectStore("kv"));
+        tx.oncomplete = () => resolve(r && r.result);
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }
+  const idbGet = k => idb("readonly", s => s.get(k));
+  const idbSet = (k, v) => idb("readwrite", s => s.put(v, k));
+  const idbDel = k => idb("readwrite", s => s.delete(k));
+  const HANDLE_KEY = "autoSaveHandle";
+
+  function updateAutoUI() {
+    const name = autoHandle ? `「${autoHandle.name}」` : "";
+    const time = lastAutoSave ? `（最終保存 ${lastAutoSave.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}）` : "";
+    $("autoSaveStatus").textContent = {
+      unsupported: "このブラウザでは使えません。Edge か Chrome で開いてください。",
+      off: "自動保存はオフです。",
+      active: `✅ 自動保存中：${name}${time}`,
+      "needs-permission": `⏸ 自動保存が止まっています：${name}。「自動保存を再開する」を押して、保存を許可してください。`,
+      error: `⚠ 自動保存できませんでした：${autoError}`,
+    }[autoState];
+    $("autoSaveSetup").disabled = autoState === "unsupported";
+    $("autoSaveSetup").textContent = autoHandle ? "保存先を変える" : "保存先ファイルを選ぶ";
+    $("autoSaveResume").hidden = !["needs-permission", "error"].includes(autoState);
+    $("autoSaveStop").hidden = !autoHandle;
+    // ブラウザを開き直して止まっているときは、画面の上でも知らせる
+    $("autoSaveNotice").hidden = !["needs-permission", "error"].includes(autoState);
+    $("autoSaveNoticeText").textContent = autoState === "error"
+      ? `⚠ 自動保存できませんでした（${autoError}）。`
+      : `⏸ 自動保存が止まっています。安全のため、ブラウザを開くたびに保存の許可が必要です。`;
+  }
+
+  function scheduleAutoSave() {
+    if (autoState !== "active") return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(writeAutoSave, 400); // 続けて操作したときは、まとめて1回だけ保存する
+  }
+  let autoWriting = Promise.resolve();
+  function writeAutoSave() {
+    autoWriting = autoWriting.then(async () => {
+      if (!autoHandle) return;
+      try {
+        const w = await autoHandle.createWritable();
+        await w.write(JSON.stringify(buildBackup(), null, 2));
+        await w.close();
+        lastAutoSave = new Date();
+        autoState = "active";
+        markBackedUp();
+      } catch (e) {
+        autoState = e.name === "NotAllowedError" ? "needs-permission" : "error";
+        autoError = e.name === "NotFoundError" ? "保存先のファイルが見つかりません。保存先を選び直してください" : e.message;
+      }
+      updateAutoUI();
+    });
+    return autoWriting;
+  }
+
+  async function setupAutoSave() {
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: "家計簿データ_自動保存.json",
+        types: [{ description: "家計簿データ", accept: { "application/json": [".json"] } }],
+      });
+    } catch (e) {
+      if (e.name !== "AbortError") { autoState = "error"; autoError = e.message; updateAutoUI(); }
+      return; // キャンセルしたときは何もしない
+    }
+    autoHandle = handle;
+    autoState = "active";
+    try { await idbSet(HANDLE_KEY, handle); } catch {} // 覚えておけない環境では、次回また選ぶ必要がある
+    await writeAutoSave();
+  }
+  async function resumeAutoSave() {
+    if (!autoHandle) return setupAutoSave();
+    try {
+      const p = await autoHandle.requestPermission({ mode: "readwrite" });
+      if (p !== "granted") return;
+      autoState = "active";
+      await writeAutoSave();
+    } catch (e) { autoState = "error"; autoError = e.message; updateAutoUI(); }
+  }
+  async function stopAutoSave() {
+    if (!confirm("自動保存をやめますか？\n（今までに保存したファイルは消えずに残ります）")) return;
+    autoHandle = null; autoState = "off"; lastAutoSave = null;
+    try { await idbDel(HANDLE_KEY); } catch {}
+    updateAutoUI(); updateBackupNotice();
+  }
+  async function initAutoSave() {
+    if (!("showSaveFilePicker" in window)) { autoState = "unsupported"; updateAutoUI(); return; }
+    try { autoHandle = (await idbGet(HANDLE_KEY)) || null; } catch { autoHandle = null; }
+    if (autoHandle) {
+      try {
+        const p = await autoHandle.queryPermission({ mode: "readwrite" });
+        autoState = p === "granted" ? "active" : "needs-permission";
+      } catch { autoState = "needs-permission"; }
+    }
+    updateAutoUI();
+    updateBackupNotice();
+    if (autoState === "active") writeAutoSave();
+  }
+  $("autoSaveSetup").addEventListener("click", setupAutoSave);
+  $("autoSaveResume").addEventListener("click", resumeAutoSave);
+  $("autoSaveNoticeResume").addEventListener("click", resumeAutoSave);
+  $("autoSaveStop").addEventListener("click", stopAutoSave);
+
+  // ---- バックアップのお知らせ（最後のバックアップから30日たったら表示） ----
+  const LAST_BACKUP_KEY = "kakeibo-last-backup", BACKUP_BASE_KEY = "kakeibo-backup-base", SNOOZE_KEY = "kakeibo-backup-snooze";
+  const DAY = 24 * 60 * 60 * 1000, REMIND_DAYS = 30, SNOOZE_DAYS = 7;
+  function markBackedUp() { lsSet(LAST_BACKUP_KEY, String(Date.now())); updateBackupNotice(); }
+
+  // お知らせを出すかどうかを決める（出さないときは null）
+  function backupReminder({ now, lastBackup, base, snoozeUntil, hasData, autoActive }) {
+    if (!hasData || autoActive) return null;
+    if (snoozeUntil && now < snoozeUntil) return null;
+    const from = lastBackup || base;
+    if (!from) return null;
+    const days = Math.floor((now - from) / DAY);
+    return days >= REMIND_DAYS ? { days, never: !lastBackup } : null;
+  }
+  function updateBackupNotice() {
+    const hasData = entries.length > 0 || fixed.length > 0;
+    // まだ一度もバックアップしていない人は、データを入れ始めた日から数える
+    if (hasData && !lsGet(BACKUP_BASE_KEY)) lsSet(BACKUP_BASE_KEY, String(Date.now()));
+    const r = backupReminder({
+      now: Date.now(),
+      lastBackup: Number(lsGet(LAST_BACKUP_KEY)) || null,
+      base: Number(lsGet(BACKUP_BASE_KEY)) || null,
+      snoozeUntil: Number(lsGet(SNOOZE_KEY)) || null,
+      hasData, autoActive: autoState === "active",
+    });
+    $("backupNotice").hidden = !r;
+    if (r) $("backupNoticeText").textContent = r.never
+      ? `💾 使い始めて${r.days}日たちましたが、まだ一度もバックアップしていません。`
+      : `💾 前回のバックアップから${r.days}日たっています。そろそろバックアップしませんか？`;
+  }
+  function openDataPanel() {
+    $("dataPanel").hidden = false;
+    $("dataToggle").setAttribute("aria-expanded", true);
+    showDataInfo();
+    $("dataPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  $("backupNow").addEventListener("click", () => $("exportBtn").click());
+  $("backupAutoSetup").addEventListener("click", openDataPanel);
+  $("backupLater").addEventListener("click", () => {
+    lsSet(SNOOZE_KEY, String(Date.now() + SNOOZE_DAYS * DAY));
+    updateBackupNotice();
+  });
+
+  initAutoSave();
+
+  // ---- 使い方 ----
+  const HELP_KEY = "kakeibo-help-seen";
+  $("helpOpen").addEventListener("click", () => $("helpDialog").showModal());
+  $("helpClose").addEventListener("click", () => $("helpDialog").close());
+  // 外側（暗い所）を押しても閉じる
+  $("helpDialog").addEventListener("click", e => { if (e.target === $("helpDialog")) $("helpDialog").close(); });
+  // 初めて開いた人（まだ記録がなく、使い方を見たことがない）には最初に1回だけ表示する
+  try {
+    if (!localStorage.getItem(HELP_KEY) && entries.length === 0 && fixed.length === 0) {
+      localStorage.setItem(HELP_KEY, "1");
+      $("helpDialog").showModal();
+    }
+  } catch {} // 保存できない環境では毎回出てしまうので、自動表示しない
+
+  // ---- 入力メニューの開閉 ----
+  // 広い画面: 左の列として表示（開閉の状態を覚えておく） / 狭い画面: 左から引き出す（最初は閉じる）
+  const MENU_KEY = "kakeibo-menu";
+  const narrow = matchMedia("(max-width: 900px)");
+  const savedMenuOpen = () => { try { return localStorage.getItem(MENU_KEY) !== "closed"; } catch { return true; } };
+  function setMenu(open) {
+    document.body.classList.toggle("menu-open", open);
+    $("menuToggle").setAttribute("aria-expanded", open);
+    if (!narrow.matches) { try { localStorage.setItem(MENU_KEY, open ? "open" : "closed"); } catch {} }
+  }
+  const menuIsOpen = () => document.body.classList.contains("menu-open");
+  $("menuToggle").addEventListener("click", () => setMenu(!menuIsOpen()));
+  $("menuClose").addEventListener("click", () => setMenu(false));
+  $("backdrop").addEventListener("click", () => setMenu(false));
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && narrow.matches && menuIsOpen()) setMenu(false); });
+  narrow.addEventListener("change", e => setMenu(e.matches ? false : savedMenuOpen()));
+  // 最初の表示ではアニメーションさせない
+  document.querySelector(".layout").style.transition = "none";
+  setMenu(narrow.matches ? false : savedMenuOpen());
+  requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(".layout").style.transition = ""));
+
+  resetFixedForm();
+  render();
+</script>
+</body>
+</html>
