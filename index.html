@@ -96,6 +96,7 @@
   td { padding: 8px 4px; border-top: 1px solid var(--line); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   td .memo { color: var(--muted); font-size: .8rem; }
+  td .memo.note { overflow-wrap: anywhere; }
   .del { background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px; }
   .empty { color: var(--muted); text-align: center; padding: 12px; }
   .badge { display: inline-block; font-size: .7rem; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: var(--on-accent); margin-left: 4px; vertical-align: middle; }
@@ -115,6 +116,23 @@
   #ovDialog { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
     padding: 20px; width: min(440px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
   #ovDialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog.modal { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; width: min(420px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  dialog.modal::backdrop { background: rgba(0,0,0,.35); }
+  dialog.modal h3 { margin: 0; font-size: 1.05rem; }
+  .cat-summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: 1rem; }
+  #catManager[open] .cat-summary { margin-bottom: 12px; }
+  .cat-type { margin-bottom: 10px; }
+  .cat-list { list-style: none; margin: 0 0 10px; padding: 0; }
+  .cat-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-top: 1px solid var(--line); }
+  .cat-list li:first-child { border-top: none; }
+  .cat-list input { flex: 1; min-width: 0; padding: 6px 8px; }
+  .cat-list .count { font-size: .75rem; color: var(--muted); white-space: nowrap; min-width: 3.5em; text-align: right; }
+  .cat-list button { cursor: pointer; padding: 4px 8px; }
+  .cat-list button:disabled { opacity: .3; cursor: default; }
+  .cat-add { display: flex; gap: 8px; }
+  .cat-add input { flex: 1; min-width: 0; }
+  .cat-add button { cursor: pointer; }
   #ovDialog h3 { margin: 0; font-size: 1.05rem; }
   #ovDialog .hint { margin: 0 0 4px; }
   .ov-actions { display: flex; gap: 8px; margin-top: 6px; }
@@ -258,7 +276,7 @@
       <details open>
         <summary>🧭 画面の見方</summary>
         <ul>
-          <li><b>左側（入力メニュー）</b>：記録の追加と、毎月の固定収支の登録をします。左上の「☰ 入力メニュー」で開いたり閉じたりできます。</li>
+          <li><b>左側（入力メニュー）</b>：記録の追加、毎月の固定収支の登録、カテゴリの管理をします。左上の「☰ 入力メニュー」で開いたり閉じたりできます。</li>
           <li><b>右側（月の表示）</b>：表示している月の収入・支出・収支の合計、支出のカテゴリ別グラフ、明細が出ます。</li>
           <li>スマホなど画面が狭いときは、入力メニューは左から引き出す形になります。暗い所を押すと閉じます。</li>
         </ul>
@@ -296,6 +314,7 @@
           <li><b>毎月の日付</b>：その日に計上されます。31日など、その月にない日は月末になります。</li>
           <li><b>土日・祝日に当たったら</b>：「直前の平日にずらす」「直後の平日にずらす」を選べます（給料日などに）。祝日は振替休日も含めて自動で判定します。</li>
           <li><b>日付は決めない</b>：毎月あるけれど日付がまちまちなものに。明細では「日付なし」として一番下に出ます。</li>
+          <li><b>メモ</b>：支払い方法や契約内容などを書いておけます（なくても可）。明細と登録済み一覧に 📝 付きで表示されます。</li>
           <li><b>開始月・終了月</b>：その期間だけ計上されます。終了月が空欄なら無期限です。</li>
         </ul>
         <p><b>登録済み一覧</b>から、あとで変更・削除できます。</p>
@@ -315,6 +334,18 @@
         <ul>
           <li>ほかの月には影響しません。変更した月には「この月だけ変更」「この月はなし」と表示されます。</li>
           <li>「元に戻す」で、いつもの金額・日付に戻せます。</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>🏷 カテゴリを追加・変更・削除する</summary>
+        <p>入力メニューの一番下「🏷 カテゴリの管理」を開きます。上の「支出 / 収入」で、どちらのカテゴリを直すか選びます。</p>
+        <ul>
+          <li><b>追加</b>：下の欄に名前を入れて「追加」を押します。</li>
+          <li><b>名前の変更</b>：一覧の名前を直して Enter を押します。そのカテゴリの記録（固定収支も含む）も、新しい名前に変わります。</li>
+          <li><b>並べ替え</b>：↑↓ で順番を変えられます。入力欄の選択肢もこの順番になります。</li>
+          <li><b>削除</b>：✕ を押します。使っている記録があるときは、移動先のカテゴリを選んでから削除します。</li>
+          <li>名前の横の「◯件」は、そのカテゴリを使っている記録の数です。</li>
         </ul>
       </details>
 
@@ -453,6 +484,7 @@
           <option value="after">直後の平日にずらす</option>
         </select>
       </label>
+      <label class="wide">メモ（なくても可）<input type="text" id="fMemo" maxlength="100" placeholder="例：口座振替（〇〇銀行）"></label>
       <label>開始月<input type="month" id="fStart" required></label>
       <label>終了月（空欄なら無期限）<input type="month" id="fEnd"></label>
       <button class="primary wide" type="submit" id="fSubmit">登録する</button>
@@ -465,6 +497,25 @@
       解約したときは「編集」で終了月を入れてください（それまでの月には残ります）。<br>
       家賃の値上げなど途中で金額が変わるときは、元の項目に終了月を入れて、新しい金額で別に登録すると過去の月の金額が変わりません。
     </p>
+  </section>
+
+  <section class="card">
+    <details id="catManager">
+      <summary class="cat-summary">🏷 カテゴリの管理（追加・名前の変更・削除）</summary>
+      <div class="type-toggle cat-type">
+        <label><input type="radio" name="catType" value="expense" checked>支出</label>
+        <label><input type="radio" name="catType" value="income">収入</label>
+      </div>
+      <ul class="cat-list" id="catList"></ul>
+      <form id="catAddForm" class="cat-add">
+        <input type="text" id="catNewName" maxlength="20" placeholder="新しいカテゴリ名（例：医療費）" required aria-label="新しいカテゴリ名">
+        <button class="primary" type="submit">追加</button>
+      </form>
+      <p class="hint">
+        名前の欄を直すと、名前を変えられます（そのカテゴリの記録も新しい名前になります）。<br>
+        ↑↓ で並び順を変えられます。✕ で削除するとき、使っている記録があれば別のカテゴリに移せます。
+      </p>
+    </details>
   </section>
   </aside>
 
@@ -505,6 +556,19 @@
   </div>
   </div>
 
+  <dialog id="catDelDialog" class="modal" aria-labelledby="catDelTitle">
+    <form id="catDelForm" method="dialog">
+      <h3 id="catDelTitle" class="wide"></h3>
+      <p class="wide" id="catDelText" style="margin:0;font-size:.9rem"></p>
+      <label class="wide">移動先のカテゴリ<select id="catDelTo"></select></label>
+      <div class="ov-actions wide">
+        <span></span>
+        <button type="button" id="catDelCancel">キャンセル</button>
+        <button type="submit" class="primary">移して削除</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="ovDialog" aria-labelledby="ovTitle">
     <form id="ovForm" method="dialog">
       <h3 id="ovTitle" class="wide"></h3>
@@ -526,10 +590,18 @@
 </main>
 
 <script>
-  const CATEGORIES = {
+  // カテゴリの初期値。利用者が追加・名前変更・削除・並べ替えできる（localStorage に保存）
+  const DEFAULT_CATEGORIES = {
     expense: ["食費", "日用品", "交通費", "趣味", "交際費", "住居・光熱", "その他"],
     income: ["給与", "賞与", "副業", "その他収入"],
   };
+  const CAT_KEY = "kakeibo-categories";
+  const validCategories = c => c && ["expense", "income"].every(t => Array.isArray(c[t]) && c[t].every(n => typeof n === "string"));
+  function loadCategories() {
+    try { const c = JSON.parse(localStorage.getItem(CAT_KEY)); if (validCategories(c)) return c; } catch {}
+    return JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+  }
+  let categories = loadCategories();
   // 収入機能を追加する前のデータには type が無いので支出として扱う
   const typeOf = e => e.type || "expense";
   const checkedType = name => document.querySelector(`input[name=${name}]:checked`).value;
@@ -549,10 +621,20 @@
   function load(key) {
     try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
   }
+  // 記録に使われているのにカテゴリ一覧にないもの（読み込んだデータなど）を一覧に足す
+  function ensureCategoriesFromData() {
+    for (const r of [...entries, ...fixed]) {
+      const t = typeOf(r);
+      if (r.category && !categories[t].includes(r.category)) categories[t].push(r.category);
+    }
+  }
+  ensureCategoriesFromData();
+
   function save() {
     try {
       localStorage.setItem(KEY, JSON.stringify(entries));
       localStorage.setItem(FIXED_KEY, JSON.stringify(fixed));
+      localStorage.setItem(CAT_KEY, JSON.stringify(categories));
     } catch {}
     scheduleAutoSave();
     updateBackupNotice();
@@ -566,8 +648,13 @@
   catch { $("storageWarn").hidden = false; }
   // 支出/収入の切り替えに合わせてカテゴリの選択肢を入れ替える
   function setCategories(selectId, type, preferred) {
-    $(selectId).innerHTML = CATEGORIES[type].map(c => `<option>${c}</option>`).join("");
-    if (preferred && CATEGORIES[type].includes(preferred)) $(selectId).value = preferred;
+    $(selectId).innerHTML = categories[type].map(c => `<option>${escapeHtml(c)}</option>`).join("");
+    if (preferred && categories[type].includes(preferred)) $(selectId).value = preferred;
+  }
+  // カテゴリを変更したあと、フォームの選択肢を作り直す（選んでいたものはそのまま）
+  function refreshCategorySelects() {
+    setCategories("category", checkedType("type"), $("category").value);
+    setCategories("fCategory", checkedType("fType"), $("fCategory").value);
   }
   function syncForm() {
     const t = checkedType("type");
@@ -599,7 +686,7 @@
   function resetFixedForm() {
     editingId = null;
     $("fNoDay").checked = false; syncNoDay();
-    $("fName").value = ""; $("fAmount").value = "";
+    $("fName").value = ""; $("fAmount").value = ""; $("fMemo").value = "";
     $("fStart").value = toYm(current); // 新規は表示中の月から
     $("fEnd").value = "";
     $("fSubmit").textContent = "登録する";
@@ -613,6 +700,7 @@
     setCategories("fCategory", typeOf(f), f.category);
     $("fName").value = f.name;
     $("fAmount").value = f.amount;
+    $("fMemo").value = f.memo || "";
     $("fNoDay").checked = f.day == null;
     if (f.day != null) $("fDay").value = f.day;
     $("fShift").value = f.shift || "none";
@@ -635,6 +723,7 @@
       category: $("fCategory").value,
       day: $("fNoDay").checked ? null : Number($("fDay").value), // null = 日付は決めない
       shift: $("fNoDay").checked ? "none" : $("fShift").value,
+      memo: $("fMemo").value.trim(),
       start: $("fStart").value,
       end: $("fEnd").value || null,
     };
@@ -738,7 +827,7 @@
       .filter(f => f.start <= ym && (!f.end || ym <= f.end))
       .map(f => ({
         ...applyOverride(f, ym, y, m, lastDay),
-        id: null, fixed: true, fixedId: f.id, ym, type: typeOf(f), category: f.category, memo: f.name,
+        id: null, fixed: true, fixedId: f.id, ym, type: typeOf(f), category: f.category, memo: f.name, note: f.memo || "",
       }));
   }
 
@@ -842,8 +931,8 @@
           return `
           <tr class="${f.id === editingId ? "editing" : ""} ${ended ? "ended" : ""}">
             <td>${escapeHtml(f.name)}${status ? `<span class="status">${status}</span>` : ""}
-              <div class="memo">${f.category}・${f.day == null ? "毎月（日付なし）" : `毎月${f.day}日`}${{ before: "（土日祝は前の平日）", after: "（土日祝は次の平日）" }[f.shift] || ""}</div>
-              <div class="memo">${ymLabel(f.start)}〜${f.end ? ymLabel(f.end) : ""}</div></td>
+              <div class="memo">${escapeHtml(f.category)}・${f.day == null ? "毎月（日付なし）" : `毎月${f.day}日`}${{ before: "（土日祝は前の平日）", after: "（土日祝は次の平日）" }[f.shift] || ""}</div>
+              <div class="memo">${ymLabel(f.start)}〜${f.end ? ymLabel(f.end) : ""}</div>${f.memo ? `<div class="memo note">📝 ${escapeHtml(f.memo)}</div>` : ""}</td>
             <td class="num">${signedYen(f)}</td>
             <td style="white-space:nowrap">
               <button class="edit" data-id="${f.id}" data-action="edit">編集</button>
@@ -872,10 +961,12 @@
       ? `<div class="empty">まだ支出がありません</div>`
       : Object.entries(sums).sort((a, b) => b[1] - a[1]).map(([cat, sum]) => `
           <div class="row">
-            <span>${cat}</span>
+            <span>${escapeHtml(cat)}</span>
             <div class="track"><div class="fill" style="width:${sum / max * 100}%"></div></div>
             <span class="amt">${yen(sum)}</span>
           </div>`).join("");
+
+    if ($("catManager").open) renderCatManager(); // カテゴリごとの件数を最新にする
 
     // 明細
     $("list").innerHTML = month.length === 0
@@ -883,9 +974,9 @@
       : month.map(e => `
           <tr class="${e.skipped ? "skipped" : ""}">
             <td>${e.noDay ? '<span class="no-day">日付なし</span>' : e.date.slice(5).replace("-", "/")}</td>
-            <td>${e.category}${e.fixed ? '<span class="badge">固定</span>' : ""}${
+            <td>${escapeHtml(e.category)}${e.fixed ? '<span class="badge">固定</span>' : ""}${
               e.skipped ? '<span class="status">この月はなし</span>' : e.overridden ? '<span class="status">この月だけ変更</span>' : ""}
-              <div class="memo">${escapeHtml(e.memo)}</div></td>
+              <div class="memo">${escapeHtml(e.memo)}</div>${e.note ? `<div class="memo note">📝 ${escapeHtml(e.note)}</div>` : ""}</td>
             <td class="num">${signedYen(e)}</td>
             <td style="white-space:nowrap">${e.fixed
               ? `<button class="edit" data-fixed-id="${e.fixedId}" data-ym="${e.ym}" title="この月だけ金額や日付を変える">変更</button>`
@@ -1088,7 +1179,8 @@
       syncForm();
       document.querySelectorAll("#form .filled").forEach(el => el.classList.remove("filled"));
       const fill = (id, v) => { if (v) { $(id).value = v; $(id).classList.add("filled"); } };
-      fill("date", r.date); fill("amount", r.amount); fill("memo", r.store); fill("category", r.category);
+      fill("date", r.date); fill("amount", r.amount); fill("memo", r.store);
+      if (categories.expense.includes(r.category)) fill("category", r.category); // 削除・名前変更したカテゴリは推測しない
 
       const missing = [!r.amount && "金額", !r.date && "日付"].filter(Boolean);
       $("ocrMsg").className = "ocr-msg" + (missing.length || r.amountGuessed ? " warn" : "");
@@ -1208,7 +1300,7 @@
   }
 
   function buildBackup() {
-    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme };
+    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme, categories };
   }
   $("exportBtn").addEventListener("click", () => {
     const d = new Date();
@@ -1263,6 +1355,11 @@
     fixed = pendingImport.fixed;
     theme = pendingImport.theme || {};
     applyTheme();
+    // カテゴリも置き換える（古い書き出しファイルには無いので、そのときは初期値）
+    categories = validCategories(pendingImport.categories)
+      ? pendingImport.categories : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+    ensureCategoriesFromData();
+    refreshCategorySelects(); renderCatManager();
     finishImport(`置き換えました（記録 ${entries.length}件・固定収支 ${fixed.length}件）。`);
   });
   $("importMerge").addEventListener("click", () => {
@@ -1271,9 +1368,123 @@
     const newFixed = pendingImport.fixed.filter(f => !fixedIds.has(f.id));
     entries = entries.concat(newEntries);
     fixed = fixed.concat(newFixed);
+    // ファイル側にしかないカテゴリは、今の一覧の後ろに足す
+    if (validCategories(pendingImport.categories)) {
+      for (const t of ["expense", "income"]) {
+        pendingImport.categories[t].forEach(c => { if (!categories[t].includes(c)) categories[t].push(c); });
+      }
+    }
+    ensureCategoriesFromData();
+    refreshCategorySelects(); renderCatManager();
     finishImport(`追加しました（記録 ${newEntries.length}件・固定収支 ${newFixed.length}件。すでにあった ${pendingImport.entries.length - newEntries.length + pendingImport.fixed.length - newFixed.length}件は重複なのでとばしました）。`);
   });
   $("importCancel").addEventListener("click", () => { $("importDialog").close(); pendingImport = null; });
+
+  // ---- カテゴリの管理 ----
+  const catType = () => checkedType("catType");
+  // そのカテゴリを使っている記録（普通の記録＋固定収支）の数
+  const usageOf = (type, name) =>
+    [...entries, ...fixed].filter(r => typeOf(r) === type && r.category === name).length;
+  // そのカテゴリの記録を、別の名前に付け替える（名前の変更・削除時の移動に使う）
+  function moveCategory(type, from, to) {
+    [...entries, ...fixed].forEach(r => { if (typeOf(r) === type && r.category === from) r.category = to; });
+  }
+  function afterCategoryChange() {
+    save(); refreshCategorySelects(); renderCatManager(); render();
+  }
+
+  function renderCatManager() {
+    const t = catType(), list = categories[t];
+    $("catList").innerHTML = list.map((name, i) => `
+      <li>
+        <input value="${escapeHtml(name)}" data-i="${i}" maxlength="20" aria-label="カテゴリ名（${escapeHtml(name)}）">
+        <span class="count">${usageOf(t, name)}件</span>
+        <button data-move="-1" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="上へ">↑</button>
+        <button data-move="1" data-i="${i}" ${i === list.length - 1 ? "disabled" : ""} aria-label="下へ">↓</button>
+        <button class="del" data-del="${i}" aria-label="削除">✕</button>
+      </li>`).join("");
+  }
+  document.querySelectorAll("input[name=catType]").forEach(r => r.addEventListener("change", renderCatManager));
+
+  // 名前のチェック（空・重複は不可）。問題があればメッセージを返す
+  function checkCategoryName(type, name, exceptIndex) {
+    if (!name) return "カテゴリ名を入れてください。";
+    if (categories[type].some((n, i) => n === name && i !== exceptIndex)) return `「${name}」はもうあります。`;
+    return null;
+  }
+
+  $("catAddForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const t = catType(), name = $("catNewName").value.trim();
+    const err = checkCategoryName(t, name);
+    if (err) { alert(err); return; }
+    categories[t].push(name);
+    $("catNewName").value = "";
+    afterCategoryChange();
+  });
+
+  // 名前の変更（入力欄からフォーカスが外れたとき・Enter で確定）
+  $("catList").addEventListener("change", e => {
+    const i = Number(e.target.dataset.i);
+    if (e.target.tagName !== "INPUT") return;
+    const t = catType(), oldName = categories[t][i], newName = e.target.value.trim();
+    if (newName === oldName) return;
+    const err = checkCategoryName(t, newName, i);
+    if (err) { alert(err); e.target.value = oldName; return; }
+    const n = usageOf(t, oldName);
+    if (n > 0 && !confirm(`「${oldName}」を「${newName}」に変えます。\nこのカテゴリの記録 ${n}件も「${newName}」になります。よろしいですか？`)) {
+      e.target.value = oldName; return;
+    }
+    categories[t][i] = newName;
+    moveCategory(t, oldName, newName);
+    afterCategoryChange();
+  });
+  $("catList").addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); e.target.blur(); }
+  });
+
+  let catDelTarget = null; // { type, index }
+  $("catList").addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const t = catType(), list = categories[t], i = Number(b.dataset.i ?? b.dataset.del);
+    if (b.dataset.move) { // 並べ替え
+      const j = i + Number(b.dataset.move);
+      [list[i], list[j]] = [list[j], list[i]];
+      afterCategoryChange();
+      $("catList").querySelectorAll(`button[data-move="${b.dataset.move}"]`)[j]?.focus();
+      return;
+    }
+    // 削除
+    const name = list[i];
+    if (list.length === 1) { alert("カテゴリは最低1つ必要です。先に別のカテゴリを追加してください。"); return; }
+    const n = usageOf(t, name);
+    if (n === 0) {
+      if (!confirm(`カテゴリ「${name}」を削除しますか？`)) return;
+      list.splice(i, 1);
+      afterCategoryChange();
+      return;
+    }
+    // 使っている記録があるときは、移動先を選んでもらう
+    catDelTarget = { type: t, index: i };
+    $("catDelTitle").textContent = `カテゴリ「${name}」を削除`;
+    $("catDelText").textContent = `このカテゴリを使っている記録が ${n}件あります（固定収支を含む）。移動先のカテゴリを選んでください。`;
+    const others = list.filter((_, k) => k !== i);
+    $("catDelTo").innerHTML = others.map(c => `<option>${escapeHtml(c)}</option>`).join("");
+    const fallback = others.find(c => c.startsWith("その他"));
+    if (fallback) $("catDelTo").value = fallback;
+    $("catDelDialog").showModal();
+  });
+  $("catDelForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const { type, index } = catDelTarget, name = categories[type][index];
+    moveCategory(type, name, $("catDelTo").value);
+    categories[type].splice(index, 1);
+    $("catDelDialog").close();
+    afterCategoryChange();
+  });
+  $("catDelCancel").addEventListener("click", () => $("catDelDialog").close());
+  renderCatManager();
 
   // ---- 自動保存ファイル（File System Access API。Edge・Chrome のみ） ----
   // 選んだファイルの「つかみ」(handle) は IndexedDB に保存して、次に開いたときも使う
