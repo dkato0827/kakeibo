@@ -132,6 +132,13 @@
   .period-opt small { color: var(--muted); font-size: .75rem; line-height: 1.5; }
   #pDay { width: 4.5em; padding: 4px 6px; display: inline-block; }
   #pFixed { width: 100%; }
+  .carry-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .carry-fields input { width: 100%; min-width: 0; }
+  .carry-line { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); text-align: center;
+    font-size: .85rem; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px; }
+  .carry-line[hidden] { display: none; }
+  .carry-line strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .carry-line .num { font-variant-numeric: tabular-nums; color: var(--text); }
   .cat-summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: 1rem; }
   #catManager[open] .cat-summary { margin-bottom: 12px; }
   .cat-type { margin-bottom: 10px; }
@@ -371,8 +378,8 @@
       </details>
 
       <details>
-        <summary>🗓 集計期間（給料日スタートなど）</summary>
-        <p>月の表示の下にある「⚙ 集計期間」で、何日から何日までを「1か月」として集計するかを選べます。</p>
+        <summary>🗓 集計期間（給料日スタートなど）と残高の繰り越し</summary>
+        <p>月の表示の下にある「⚙ 集計の設定」で、何日から何日までを「1か月」として集計するかを選べます。</p>
         <ul>
           <li><b>毎月1日〜月末</b>：カレンダーどおりです（最初はこれ）。</li>
           <li><b>毎月◯日から</b>：例えば25日にすると「25日〜翌月24日」で集計します。</li>
@@ -383,6 +390,13 @@
           <li>合計・カテゴリ別グラフ・明細・年月を選ぶ画面の件数は、すべてこの期間で数えます。</li>
           <li>日付なしの固定収支は、その月に始まる期間に入ります。</li>
           <li>給料日から集計するには、給料を「日付あり」の固定収支として登録しておく必要があります。</li>
+        </ul>
+        <p><b>残高の繰り越し</b>：同じ「⚙ 集計の設定」で「前の期間の残高を、次の期間に持ち越す」をオンにします。</p>
+        <ul>
+          <li>「この期間から始める」と「始めるときの残高」（例：今の口座残高）を入れます。</li>
+          <li>合計の下に「前期からの繰越 ＋ 今期の収支 ＝ 期末の残高」が出ます。期末の残高が、そのまま次の期間の繰越になります。</li>
+          <li>過去の記録を直したり、集計期間を変えたりすると、繰越も自動で計算し直されます。</li>
+          <li>始める期間より前の期間には、繰越は出ません。</li>
         </ul>
       </details>
 
@@ -567,13 +581,14 @@
     </div>
     <div class="period-line">
       <span id="periodRange"></span>
-      <button id="periodBtn" title="集計期間（何日から何日までを1か月とするか）を設定">⚙ 集計期間</button>
+      <button id="periodBtn" title="集計期間・残高の繰り越しを設定">⚙ 集計の設定</button>
     </div>
     <div class="summary">
       <div>収入<strong class="income" id="sumIncome"></strong></div>
       <div>支出<strong class="expense-amt" id="sumExpense"></strong></div>
       <div class="balance">収支<strong id="balance"></strong></div>
     </div>
+    <div class="carry-line" id="carryLine" hidden></div>
   </section>
 
   <section class="card">
@@ -590,8 +605,8 @@
 
   <dialog id="periodDialog" class="modal" aria-labelledby="periodTitle">
     <form id="periodForm" method="dialog" class="period-form">
-      <h3 id="periodTitle">集計期間の設定</h3>
-      <p class="hint" style="margin:0">何日から何日までを「1か月」として集計するかを選びます。</p>
+      <h3 id="periodTitle">集計の設定</h3>
+      <p class="hint" style="margin:0"><b>集計期間</b>：何日から何日までを「1か月」として集計するかを選びます。</p>
       <label class="period-opt"><input type="radio" name="pMode" value="calendar">
         <span><b>毎月1日〜月末</b><small>カレンダーどおり</small></span></label>
       <label class="period-opt"><input type="radio" name="pMode" value="day">
@@ -601,6 +616,14 @@
         <span><b>給料日から、次の給料日の前日まで</b>
         <select id="pFixed" aria-label="給料にあたる固定収支"></select>
         <small id="pFixedHint">給料が明細に入る日（土日祝でずれた日や「その月だけ変更」した日も含む）から集計します</small></span></label>
+
+      <p class="hint" style="margin:6px 0 0"><b>残高の繰り越し</b>：期間の収支を、次の期間に持ち越して残高を出します。</p>
+      <label class="check"><input type="checkbox" id="cEnabled">前の期間の残高を、次の期間に持ち越す</label>
+      <div class="carry-fields" id="carryFields">
+        <label>この期間から始める<input type="month" id="cStart"></label>
+        <label>始めるときの残高（円）<input type="number" id="cInitial" step="1" placeholder="0"></label>
+        <small class="hint" style="grid-column:1/-1;margin:0">例：今の口座残高を入れておくと、毎期の終わりの残高が分かります。マイナスも入れられます。</small>
+      </div>
       <div class="ov-actions">
         <span></span>
         <button type="button" id="periodCancel">キャンセル</button>
@@ -949,6 +972,24 @@
       .concat(fixedEntriesFor(ym).filter(e => e.noDay || inRange(e.date)))
       .concat(fixedEntriesFor(addMonths(ym, 1)).filter(e => !e.noDay && inRange(e.date)));
   }
+  // ---- 残高の繰り越し ----
+  // carry = { enabled, startYm: 繰り越しを始める期間（"YYYY-MM"）, initial: その期間の始めの残高 }
+  const CARRY_KEY = "kakeibo-carry";
+  const validCarry = c => c && typeof c.enabled === "boolean" && /^\d{4}-\d{2}$/.test(c.startYm || "") && Number.isFinite(c.initial);
+  let carry = (() => { try { const c = JSON.parse(localStorage.getItem(CARRY_KEY)); if (validCarry(c)) return c; } catch {} return { enabled: false, startYm: null, initial: 0 }; })();
+  // その期間の収支（「この月はなし」にした固定収支は除く）
+  function periodBalance(ym) {
+    return periodRecords(ym).filter(e => !e.skipped)
+      .reduce((s, e) => s + (typeOf(e) === "income" ? e.amount : -e.amount), 0);
+  }
+  // ym の期間に、前の期間から繰り越される金額（繰り越しを使わない・開始前なら null）
+  function carryInto(ym) {
+    if (!carry.enabled || !carry.startYm || ym < carry.startYm) return null;
+    let total = carry.initial;
+    for (let p = carry.startYm, i = 0; p < ym && i < 1200; p = addMonths(p, 1), i++) total += periodBalance(p);
+    return total;
+  }
+
   const ymToParts = ym => ym.split("-").map(Number);
   const ymToDate = ym => { const [y, m] = ymToParts(ym); return new Date(y, m - 1, 1); };
 
@@ -1063,6 +1104,19 @@
     $("sumExpense").textContent = yen(expense);
     $("balance").textContent = (balance > 0 ? "+" : "") + yen(balance);
     $("balance").className = balance >= 0 ? "income" : "expense-amt";
+
+    // 繰り越し：前期からの繰越 ＋ 今期の収支 ＝ 期末の残高
+    const signed = n => (n > 0 ? "+" : "") + yen(n);
+    const cls = n => n >= 0 ? "income" : "expense-amt";
+    const carried = carryInto(ym);
+    $("carryLine").hidden = !carry.enabled;
+    if (carry.enabled) {
+      $("carryLine").innerHTML = carried == null
+        ? `繰り越しは ${Number(carry.startYm.slice(0, 4))}年${Number(carry.startYm.slice(5))}月度から始まります`
+        : `<span>前期からの繰越 <span class="num">${yen(carried)}</span></span>
+           <span>＋ 今期の収支 <span class="num">${signed(balance)}</span></span>
+           <span>＝ 期末の残高 <strong class="${cls(carried + balance)}">${yen(carried + balance)}</strong></span>`;
+    }
 
     // 支出のカテゴリ別の棒グラフ
     const sums = {};
@@ -1412,7 +1466,7 @@
   }
 
   function buildBackup() {
-    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme, categories, period };
+    return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries, fixed, theme, categories, period, carry };
   }
   $("exportBtn").addEventListener("click", () => {
     const d = new Date();
@@ -1475,6 +1529,8 @@
     // 集計期間も置き換える（古い書き出しファイルには無いので、そのときは1日〜月末）
     period = validPeriod(pendingImport.period) ? pendingImport.period : { mode: "calendar", day: 25, fixedId: null };
     lsSet(PERIOD_KEY, JSON.stringify(period));
+    carry = validCarry(pendingImport.carry) ? pendingImport.carry : { enabled: false, startYm: null, initial: 0 };
+    lsSet(CARRY_KEY, JSON.stringify(carry));
     current = ymToDate(periodYmOf(todayStr()));
     finishImport(`置き換えました（記録 ${entries.length}件・固定収支 ${fixed.length}件）。`);
   });
@@ -1512,8 +1568,19 @@
     $("pDay").value = period.day || 25;
     const mode = period.mode === "payday" && !paydayFixed() ? "calendar" : period.mode;
     document.querySelector(`input[name=pMode][value=${mode}]`).checked = true;
+    // 繰り越し（初めて使うときは、表示中の期間から残高0で始める）
+    $("cEnabled").checked = carry.enabled;
+    $("cStart").value = carry.startYm || toYm(current);
+    $("cInitial").value = carry.startYm ? carry.initial : "";
+    syncCarryFields();
     $("periodDialog").showModal();
   }
+  function syncCarryFields() {
+    const on = $("cEnabled").checked;
+    $("cStart").disabled = $("cInitial").disabled = !on;
+    $("cStart").required = on;
+  }
+  $("cEnabled").addEventListener("change", syncCarryFields);
   $("periodBtn").addEventListener("click", openPeriodDialog);
   // 日付や給料を選んだら、そのオプションも選ばれた状態にする
   $("pDay").addEventListener("input", () => { document.querySelector("input[name=pMode][value=day]").checked = true; });
@@ -1525,6 +1592,10 @@
     const day = Math.min(31, Math.max(1, Math.round(Number($("pDay").value)) || 1));
     period = { mode: mode === "day" && day === 1 ? "calendar" : mode, day, fixedId: Number($("pFixed").value) || null };
     lsSet(PERIOD_KEY, JSON.stringify(period));
+    carry = $("cEnabled").checked
+      ? { enabled: true, startYm: $("cStart").value, initial: Math.round(Number($("cInitial").value)) || 0 }
+      : { ...carry, enabled: false }; // 止めても開始期間と残高は覚えておく
+    lsSet(CARRY_KEY, JSON.stringify(carry));
     scheduleAutoSave();
     $("periodDialog").close();
     goToMonth(...ymToParts(periodYmOf(todayStr()))); // 今日が入る期間を表示
